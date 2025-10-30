@@ -1,0 +1,2807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Service Matcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="bg-slate-100 text-slate-800 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-7xl bg-white rounded-xl shadow-lg p-6 md:p-8 space-y-6">
+        <!-- Header Section -->
+        <div>
+            <h1 class="text-3xl font-bold text-slate-900">CSV Service Matcher</h1>
+            <p class="mt-2 text-slate-600">Upload two CSV files. The tool will find service names from the second file within the 'Summary' column of the first file and merge the data.</p>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-200">
+            <!-- Services CSV Input (Optional) -->
+            <div>
+                <label for="services-file" class="block text-sm font-medium text-slate-700 mb-1">1. Upload Services CSV(s) (Optional)</label>
+                <p class="text-xs text-slate-500 mb-2">Must contain a "Service0" column. You can select multiple files.</p>
+                <input type="file" id="services-file" accept=".csv" multiple class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-colors duration-200"/>
+            </div>
+            <!-- JIRA CSV Input (Optional) -->
+            <div>
+                <label for="jira-file" class="block text-sm font-medium text-slate-700 mb-1">2. Upload JIRA CSV (Optional)</label>
+                <p class="text-xs text-slate-500 mb-2">If provided, must contain a "Summary" column.</p>
+                <input type="file" id="jira-file" accept=".csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors duration-200"/>
+            </div>
+            <!-- Versions JSON Input (Optional - Multiple) -->
+            <div>
+                <label for="versions-file" class="block text-sm font-medium text-slate-700 mb-1">3. Upload Versions JSON (Optional)</label>
+                <p class="text-xs text-slate-500 mb-2">Must contain a "service_versions" array. You can select multiple files. Requires deployment links in Settings.</p>
+                <input type="file" id="versions-file" accept=".json" multiple class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 transition-colors duration-200"/>
+            </div>
+        </div>
+        
+        <!-- Action Button -->
+        <div class="flex justify-center items-center gap-3 pt-4">
+            <button id="process-btn" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-200 hover:scale-105 disabled:bg-slate-400 disabled:cursor-not-allowed disabled:scale-100">
+                Process Files
+            </button>
+            <button id="settings-btn" class="bg-gray-600 text-white font-bold py-2 px-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform duration-200 hover:scale-105" title="Settings">
+                ⚙️
+            </button>
+        </div>
+
+        <!-- Table Controls (Initially Hidden) -->
+        <div id="table-controls" class="hidden space-y-4 pt-4 border-t border-slate-200">
+            <!-- Sort Controls -->
+            <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                <div class="flex items-center gap-2">
+                    <label for="sort-column" class="text-sm font-medium text-slate-700">Sort by:</label>
+                    <select id="sort-column" class="px-3 py-1 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Select column...</option>
+                    </select>
+                    <button id="sort-direction" class="px-3 py-1 border border-slate-300 rounded-md text-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        ↑ ASC
+                    </button>
+                </div>
+                
+                <!-- Show Unhealthy Only Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-unhealthy-only" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-unhealthy-only" class="text-sm font-medium text-slate-700">Show unhealthy only</label>
+                </div>
+                
+                <!-- Show Unequal Versions Only Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-unequal-versions-only" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-unequal-versions-only" class="text-sm font-medium text-slate-700">Show unequal versions only</label>
+                </div>
+                
+                <!-- Ignore Empty Columns Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="ignore-empty-columns" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="ignore-empty-columns" class="text-sm font-medium text-slate-700">Ignore empty columns</label>
+                </div>
+                
+                <!-- Show Only CHNGS Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-only-chngs" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-only-chngs" class="text-sm font-medium text-slate-700">Show only CHNGS</label>
+                </div>
+            </div>
+            
+            <!-- Column Filter -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-sm font-medium text-slate-700">Visible Columns:</label>
+                    <button id="show-all-columns" class="text-xs px-2 py-1 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Show All
+                    </button>
+                </div>
+                <div id="column-filter" class="border border-slate-300 rounded-md p-3 min-h-[2.5rem] bg-white">
+                    <!-- Column chips will be added here dynamically -->
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Click the × next to a column name to hide it from the table.</p>
+            </div>
+        </div>
+
+        <!-- Error and Loading Section -->
+        <div id="status-container" class="text-center p-4"></div>
+
+        <!-- Results Section -->
+        <div id="results-container" class="hidden space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-200">
+                 <h2 class="text-2xl font-bold text-slate-900">Merged Data</h2>
+                 <div class="flex gap-2">
+                     <button id="add-jira-links-btn" class="bg-orange-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform duration-200 hover:scale-105">
+                        Add Jira Links
+                    </button>
+                     <button id="copy-slack-btn" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-200 hover:scale-105">
+                        Copy as Image
+                    </button>
+                     <button id="download-btn" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform duration-200 hover:scale-105">
+                        Download Merged CSV
+                    </button>
+                 </div>
+            </div>
+            <p id="summary-text" class="text-sm text-slate-600"></p>
+            <div class="table-container w-full overflow-x-auto border border-slate-200 rounded-lg max-h-[50vh]">
+                <table id="results-table" class="w-full text-sm text-left text-slate-600">
+                    <!-- Table content will be generated by JavaScript -->
+                </table>
+            </div>
+            
+            <!-- Row Management Buttons -->
+            <div class="flex justify-between items-center pt-4 border-t border-slate-200">
+                <div class="flex gap-2">
+                    <button id="delete-selected-btn" class="bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Delete Selected Rows
+                    </button>
+                    <button id="restore-rows-btn" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Restore Deleted Rows
+                    </button>
+                </div>
+                <div id="selection-info" class="text-sm text-slate-600">
+                    <!-- Selection info will be displayed here -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <!-- Settings Header -->
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-gray-900">Settings</h2>
+                <button id="settings-back-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
+                    ← Back
+                </button>
+            </div>
+            
+            <!-- Settings Content -->
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div class="space-y-6">
+                    <!-- Jira Deployment Links Section -->
+                    <div>
+                        <label for="jira-deployment-links" class="block text-sm font-medium text-gray-700 mb-2">
+                            Jira Deployment Links
+                        </label>
+                        <p class="text-sm text-gray-500 mb-3">
+                            Enter deployment links, one per line. These links will be used for generating deployment references.
+                        </p>
+                        <textarea 
+                            id="jira-deployment-links" 
+                            rows="10" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                            placeholder="https://example.com/deployment1&#10;https://example.com/deployment2&#10;https://example.com/deployment3"
+                        ></textarea>
+                        <p class="text-xs text-gray-400 mt-2">
+                            Changes are automatically saved when you go back to the main window.
+                        </p>
+                    </div>
+
+                    <!-- Jira Build Links Section -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="jira-build-links" class="block text-sm font-medium text-gray-700">
+                                Jira Build Links
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <button 
+                                    id="refresh-build-links-btn" 
+                                    class="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:hover:bg-gray-300 transition-colors duration-200"
+                                    title="Fetch build links from Jenkins API (requires configuration)"
+                                    disabled
+                                >
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                    Refresh
+                                </button>
+                                <button 
+                                    id="toggle-jenkins-config-btn" 
+                                    class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors duration-200"
+                                    title="Show/hide Jenkins configuration"
+                                >
+                                    ⚙️ Config
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible Jenkins Configuration -->
+                        <div id="jenkins-config-section" class="hidden mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                            <h4 class="text-sm font-medium text-gray-800 mb-2">Jenkins API Configuration</h4>
+                            <div>
+                                <label for="jenkins-deploys-url" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins Deploys URL
+                                </label>
+                                <input 
+                                    type="url" 
+                                    id="jenkins-deploys-url" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="https://jenkins.example.com/job/deploys/api/json"
+                                />
+                            </div>
+                            <div>
+                                <label for="jenkins-api-username" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins API Username
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="jenkins-api-username" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-username"
+                                />
+                            </div>
+                            <div>
+                                <label for="jenkins-api-pass" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins API Password/Token
+                                </label>
+                                <input 
+                                    type="password" 
+                                    id="jenkins-api-pass" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-api-token"
+                                />
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">
+                                These credentials are saved locally in your browser and used to fetch build links from Jenkins API.
+                            </p>
+                        </div>
+                        
+                        <p class="text-sm text-gray-500 mb-3">
+                            Enter build links, one per line. These links will be used for generating build references in the matched data.
+                        </p>
+                        <textarea 
+                            id="jira-build-links" 
+                            rows="8" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                            placeholder="https://build.example.com/job/service1&#10;https://build.example.com/job/service2&#10;https://build.example.com/job/service3"
+                        ></textarea>
+                        <p class="text-xs text-gray-400 mt-2">
+                            Changes are automatically saved when you go back to the main window.
+                        </p>
+                    </div>
+
+                    <!-- Filter Environment Name Section -->
+                    <div>
+                        <label for="filter-env-regex" class="block text-sm font-medium text-gray-700 mb-2">
+                            Filter Environment Name
+                        </label>
+                        <p class="text-sm text-gray-500 mb-3">
+                            Enter a regex pattern to shorten environment names. The pattern will be used to extract a portion of the Environment column value.
+                        </p>
+                        <input 
+                            type="text" 
+                            id="filter-env-regex" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                            placeholder="e.g., ([^-]+) to extract text before hyphen"
+                        />
+                        <p class="text-xs text-gray-400 mt-2">
+                            Leave empty to show full environment names. Example: "([^-]+)" extracts "prod" from "prod-us-east-1".
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM element references
+        const jiraFileInput = document.getElementById('jira-file');
+        const servicesFileInput = document.getElementById('services-file');
+        const versionsFileInput = document.getElementById('versions-file');
+        const processBtn = document.getElementById('process-btn');
+        const statusContainer = document.getElementById('status-container');
+        const resultsContainer = document.getElementById('results-container');
+        const downloadBtn = document.getElementById('download-btn');
+        const copySlackBtn = document.getElementById('copy-slack-btn');
+        const resultsTable = document.getElementById('results-table');
+        const summaryText = document.getElementById('summary-text');
+        const tableControls = document.getElementById('table-controls');
+        const sortColumnSelect = document.getElementById('sort-column');
+        const sortDirectionBtn = document.getElementById('sort-direction');
+        const columnFilter = document.getElementById('column-filter');
+        const showAllColumnsBtn = document.getElementById('show-all-columns');
+        const showUnhealthyOnlyToggle = document.getElementById('show-unhealthy-only');
+        const showUnequalVersionsOnlyToggle = document.getElementById('show-unequal-versions-only');
+        const ignoreEmptyColumnsToggle = document.getElementById('ignore-empty-columns');
+        const showOnlyChngsToggle = document.getElementById('show-only-chngs');
+        const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+        const restoreRowsBtn = document.getElementById('restore-rows-btn');
+        const selectionInfo = document.getElementById('selection-info');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const settingsBackBtn = document.getElementById('settings-back-btn');
+        const jiraDeploymentLinksInput = document.getElementById('jira-deployment-links');
+        const jiraBuildLinksInput = document.getElementById('jira-build-links');
+        const filterEnvRegexInput = document.getElementById('filter-env-regex');
+        const jenkinsDeploysUrlInput = document.getElementById('jenkins-deploys-url');
+        const jenkinsApiUsernameInput = document.getElementById('jenkins-api-username');
+        const jenkinsApiPassInput = document.getElementById('jenkins-api-pass');
+        const refreshBuildLinksBtn = document.getElementById('refresh-build-links-btn');
+        const toggleJenkinsConfigBtn = document.getElementById('toggle-jenkins-config-btn');
+        const jenkinsConfigSection = document.getElementById('jenkins-config-section');
+        const addJiraLinksBtn = document.getElementById('add-jira-links-btn');
+        
+        let mergedData = [];
+        let deletedRows = []; // Store deleted rows for restoration
+        let mergedHeaders = [];
+        let visibleHeaders = [];
+        let sortColumn = '';
+        let sortDirection = 'asc';
+        let servicesFileNames = [];
+        let showUnhealthyOnly = false;
+        let showUnequalVersionsOnly = false;
+        let showOnlyChngs = false;
+        let customFilters = {}; // Store custom column filters
+        let versionsData = []; // Store parsed versions JSON data (array of objects with data and filename)
+        let versionsFileNames = []; // Store versions JSON filenames
+
+        /**
+         * Checks if a column header is a version column.
+         * Version columns are formatted as PREFIX_version_fieldname where PREFIX comes from the JSON filename.
+         * Legacy format 'version_fieldname' is also supported.
+         * @param {string} columnName - The column header name.
+         * @returns {boolean} True if this is a version column.
+         */
+        const isVersionColumn = (columnName) => {
+            if (!columnName) return false;
+            
+            // Check for legacy 'version_' prefix
+            if (columnName.startsWith('version_')) return true;
+            
+            // Check if it matches any of the current versions file prefix patterns (PREFIX_version_)
+            if (versionsFileNames.length > 0) {
+                for (const fileName of versionsFileNames) {
+                    const baseName = fileName.replace(/\.json$/i, '');
+                    const underscoreIndex = baseName.indexOf('_');
+                    if (underscoreIndex > 0) {
+                        const prefix = baseName.substring(0, underscoreIndex);
+                        if (columnName.startsWith(prefix + '_version_')) {
+                            return true;
+                        }
+                    } else {
+                        // If no underscore, check for basename_version_ pattern
+                        if (columnName.startsWith(baseName + '_version_')) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            // Also check for any PREFIX_version_ pattern where PREFIX doesn't contain underscores
+            // This handles cases where we're looking at data from a previous run
+            const versionIndex = columnName.indexOf('_version_');
+            if (versionIndex > 0) {
+                // Check if there's a prefix before _version_
+                const beforeVersion = columnName.substring(0, versionIndex);
+                // If the part before _version_ doesn't have underscores, it's likely a file prefix
+                if (!beforeVersion.includes('_')) {
+                    return true;
+                }
+            }
+            
+            return false;
+        };
+
+        /**
+         * Compares two version strings, ignoring build numbers (last segment after underscore).
+         * @param {string} version1 - First version to compare.
+         * @param {string} version2 - Second version to compare.
+         * @returns {boolean} True if versions match (ignoring build numbers).
+         */
+        const areVersionsEqual = (version1, version2) => {
+            if (!version1 || !version2) return false;
+            
+            const v1Lower = version1.toLowerCase().trim();
+            const v2Lower = version2.toLowerCase().trim();
+            
+            // Split by underscore to get parts
+            const v1Parts = v1Lower.split('_');
+            const v2Parts = v2Lower.split('_');
+            
+            // If one version has more parts (e.g., includes build number), compare without the last part
+            // Example: production_w42_20251013_123 should match production_w42_20251013
+            if (v1Parts.length === v2Parts.length) {
+                // Same number of parts, direct comparison
+                return v1Lower === v2Lower;
+            } else if (v1Parts.length > v2Parts.length) {
+                // v1 has more parts (likely has build number), compare v1 without last part to v2
+                const v1WithoutBuild = v1Parts.slice(0, v2Parts.length).join('_');
+                return v1WithoutBuild === v2Lower;
+            } else {
+                // v2 has more parts (likely has build number), compare v2 without last part to v1
+                const v2WithoutBuild = v2Parts.slice(0, v1Parts.length).join('_');
+                return v2WithoutBuild === v1Lower;
+            }
+        };
+
+        /**
+         * Parses HTML content to extract links and text separately.
+         * @param {string} content - The HTML content to parse.
+         * @returns {Object} Object with extracted links and text.
+         */
+        const parseHtmlContent = (content) => {
+            if (!content || typeof content !== 'string') return { text: content || '', links: [] };
+            
+            // Create a temporary element to parse HTML
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            
+            const links = [];
+            const anchors = tempDiv.querySelectorAll('a[href]');
+            
+            anchors.forEach((anchor, index) => {
+                links.push({
+                    url: anchor.href,
+                    text: anchor.textContent || anchor.href
+                });
+            });
+            
+            // Get text content without the links
+            let textContent = tempDiv.textContent || tempDiv.innerText || '';
+            
+            return { text: textContent.trim(), links };
+        };
+
+        /**
+         * Expands columns that contain multiple links into separate columns.
+         * @param {Array<Object>} data - The data to process.
+         * @returns {Object} Object with expanded data and new headers.
+         */
+        const expandLinksIntoColumns = (data) => {
+            if (data.length === 0) return { expandedData: data, newHeaders: [] };
+            
+            const expandedData = [];
+            const additionalHeaders = new Set();
+            
+            data.forEach(row => {
+                const newRow = {};
+                
+                Object.keys(row).forEach(column => {
+                    const content = row[column] || '';
+                    const parsed = parseHtmlContent(content);
+                    
+                    if (parsed.links.length > 0) {
+                        // If there's text content, keep the original column for text
+                        if (parsed.text) {
+                            newRow[column] = parsed.text;
+                        } else {
+                            newRow[column] = '';
+                        }
+                        
+                        // Create separate columns for each link
+                        parsed.links.forEach((link, index) => {
+                            const linkColumnName = parsed.links.length === 1 
+                                ? `${column}_Link` 
+                                : `${column}_Link_${index + 1}`;
+                            newRow[linkColumnName] = link.url;
+                            additionalHeaders.add(linkColumnName);
+                        });
+                    } else {
+                        // No links, keep original content
+                        newRow[column] = content;
+                    }
+                });
+                
+                expandedData.push(newRow);
+            });
+            
+            return { expandedData, newHeaders: Array.from(additionalHeaders) };
+        };
+
+        /**
+         * Sorts the merged data by a specific column.
+         * @param {Array<Object>} data - The data to sort.
+         * @param {string} column - The column to sort by.
+         * @param {string} direction - 'asc' or 'desc'.
+         * @returns {Array<Object>} The sorted data.
+         */
+        const sortData = (data, column, direction) => {
+            if (!column) return data;
+            
+            return [...data].sort((a, b) => {
+                const aVal = a[column] || '';
+                const bVal = b[column] || '';
+                
+                // Try to parse as numbers first
+                const aNum = parseFloat(aVal);
+                const bNum = parseFloat(bVal);
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return direction === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
+                // Otherwise sort as strings
+                const comparison = aVal.toString().localeCompare(bVal.toString());
+                return direction === 'asc' ? comparison : -comparison;
+            });
+        };
+
+        /**
+         * Initializes the sort column dropdown.
+         * @param {Array<string>} headers - Available column headers.
+         */
+        const initializeSortOptions = (headers) => {
+            sortColumnSelect.innerHTML = '<option value="">Select column...</option>';
+            headers.forEach(header => {
+                const option = document.createElement('option');
+                option.value = header;
+                option.textContent = header;
+                sortColumnSelect.appendChild(option);
+            });
+        };
+
+        /**
+         * Creates column filter chips.
+         * @param {Array<string>} headers - All available headers.
+         * @param {Array<string>} visible - Currently visible headers (optional).
+         */
+        const createColumnFilter = (headers, visible = null) => {
+            columnFilter.innerHTML = '';
+            if (visible === null) {
+                visibleHeaders = [...headers]; // Initialize all columns as visible only if not provided
+            }
+            
+            headers.forEach(header => {
+                const chip = document.createElement('span');
+                chip.className = 'column-chip';
+                chip.style.display = visibleHeaders.includes(header) ? 'inline-flex' : 'none';
+                chip.innerHTML = `
+                    ${header}
+                    <span class="column-chip-remove" data-column="${header}">×</span>
+                `;
+                columnFilter.appendChild(chip);
+            });
+        };
+
+        /**
+         * Removes a column from the visible headers and updates the display.
+         * @param {string} columnToRemove - The column to hide.
+         */
+        const removeColumn = (columnToRemove) => {
+            visibleHeaders = visibleHeaders.filter(h => h !== columnToRemove);
+            createColumnFilter(mergedHeaders, visibleHeaders);
+            refreshTable();
+        };
+
+        /**
+         * Shows all columns again.
+         */
+        const showAllColumns = () => {
+            visibleHeaders = [...mergedHeaders];
+            createColumnFilter(mergedHeaders, visibleHeaders);
+            refreshTable();
+        };
+
+        /**
+         * Makes a table cell editable.
+         * @param {HTMLElement} cell - The cell to make editable.
+         */
+        const makeEditable = (cell) => {
+            const currentValue = cell.textContent;
+            const rowIndex = parseInt(cell.getAttribute('data-row'));
+            const columnName = cell.getAttribute('data-column');
+            
+            // Create input element
+            const input = document.createElement('textarea');
+            input.className = 'cell-editor';
+            input.value = currentValue;
+            
+            // Position and show input
+            cell.style.position = 'relative';
+            cell.appendChild(input);
+            input.focus();
+            input.select();
+            
+            // Save on Enter or blur
+            const saveEdit = () => {
+                const newValue = input.value;
+                cell.textContent = newValue;
+                cell.style.position = '';
+                
+                // Update the data in mergedData
+                let dataToShow = [...mergedData];
+                
+                // Apply filters to get the correct row index
+                if (showUnhealthyOnly) {
+                    dataToShow = dataToShow.filter(row => {
+                        const status0 = (row['Status0'] || '').toUpperCase();
+                        return !status0.includes('FULL_SERVICE');
+                    });
+                }
+                
+                if (showUnequalVersionsOnly) {
+                    dataToShow = dataToShow.filter(row => {
+                        // Get the third word from Summary column
+                        const summary = (row['Summary'] || '').trim();
+                        const words = summary.split(/\s+/);
+                        const thirdWord = words.length >= 3 ? words[2] : '';
+                        
+                        if (!thirdWord) return false;
+                        
+                        // Check if any version column has a different value
+                        let hasUnequalVersion = false;
+                        Object.keys(row).forEach(key => {
+                            if (isVersionColumn(key)) {
+                                const versionValue = (row[key] || '').toString();
+                                if (versionValue && !areVersionsEqual(versionValue, thirdWord)) {
+                                    hasUnequalVersion = true;
+                                }
+                            }
+                        });
+                        
+                        return hasUnequalVersion;
+                    });
+                }
+                
+                const sortedData = sortData(dataToShow, sortColumn, sortDirection);
+                
+                if (sortedData[rowIndex]) {
+                    // Find the original row in mergedData and update it
+                    const originalRow = sortedData[rowIndex];
+                    const originalIndex = mergedData.findIndex(row => row === originalRow);
+                    if (originalIndex !== -1) {
+                        mergedData[originalIndex][columnName] = newValue;
+                    }
+                }
+            };
+            
+            // Cancel on Escape
+            const cancelEdit = () => {
+                cell.textContent = currentValue;
+                cell.style.position = '';
+            };
+            
+            input.addEventListener('blur', saveEdit);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    saveEdit();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelEdit();
+                }
+            });
+        };
+
+        /**
+         * Toggles selection of all rows.
+         */
+        const toggleSelectAll = () => {
+            const selectAllCheckbox = document.getElementById('select-all');
+            const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+            
+            rowCheckboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            
+            updateDeleteButtonState();
+        };
+
+        /**
+         * Updates the state of the delete button and selection info.
+         */
+        const updateDeleteButtonState = () => {
+            const selectedCheckboxes = document.querySelectorAll('.row-checkbox:checked');
+            const totalRows = document.querySelectorAll('.row-checkbox').length;
+            const selectedCount = selectedCheckboxes.length;
+            
+            // Update delete button state
+            deleteSelectedBtn.disabled = selectedCount === 0;
+            
+            // Update restore button state
+            restoreRowsBtn.disabled = deletedRows.length === 0;
+            
+            // Update selection info
+            if (selectedCount === 0) {
+                selectionInfo.textContent = `${totalRows} rows total`;
+            } else {
+                selectionInfo.textContent = `${selectedCount} of ${totalRows} rows selected`;
+            }
+            
+            // Update select all checkbox state
+            const selectAllCheckbox = document.getElementById('select-all');
+            if (selectAllCheckbox) {
+                if (selectedCount === 0) {
+                    selectAllCheckbox.indeterminate = false;
+                    selectAllCheckbox.checked = false;
+                } else if (selectedCount === totalRows) {
+                    selectAllCheckbox.indeterminate = false;
+                    selectAllCheckbox.checked = true;
+                } else {
+                    selectAllCheckbox.indeterminate = true;
+                }
+            }
+        };
+
+        /**
+         * Deletes selected rows from the table.
+         */
+        const deleteSelectedRows = () => {
+            const selectedCheckboxes = document.querySelectorAll('.row-checkbox:checked');
+            
+            if (selectedCheckboxes.length === 0) {
+                alert('No rows selected for deletion.');
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to delete ${selectedCheckboxes.length} selected row(s)?`)) {
+                // Get the current filtered data to find the correct rows
+                let dataToShow = [...mergedData];
+                
+                // Apply filters to match what's currently displayed
+                if (showUnhealthyOnly) {
+                    dataToShow = dataToShow.filter(row => {
+                        const status0 = (row['Status0'] || '').toUpperCase();
+                        return !status0.includes('FULL_SERVICE');
+                    });
+                }
+                
+                if (showUnequalVersionsOnly) {
+                    dataToShow = dataToShow.filter(row => {
+                        // Get the third word from Summary column
+                        const summary = (row['Summary'] || '').trim();
+                        const words = summary.split(/\s+/);
+                        const thirdWord = words.length >= 3 ? words[2] : '';
+                        
+                        if (!thirdWord) return false;
+                        
+                        // Check if any version column has a different value
+                        let hasUnequalVersion = false;
+                        Object.keys(row).forEach(key => {
+                            if (isVersionColumn(key)) {
+                                const versionValue = (row[key] || '').toString();
+                                if (versionValue && !areVersionsEqual(versionValue, thirdWord)) {
+                                    hasUnequalVersion = true;
+                                }
+                            }
+                        });
+                        
+                        return hasUnequalVersion;
+                    });
+                }
+                
+                // Apply custom filters
+                Object.keys(customFilters).forEach(column => {
+                    const filterValue = customFilters[column].toLowerCase();
+                    if (filterValue) {
+                        dataToShow = dataToShow.filter(row => {
+                            const cellValue = (row[column] || '').toString().toLowerCase();
+                            return cellValue.includes(filterValue);
+                        });
+                    }
+                });
+                
+                // Collect rows to delete
+                const rowsToDelete = [];
+                selectedCheckboxes.forEach(checkbox => {
+                    const rowIndex = parseInt(checkbox.getAttribute('data-row-index'));
+                    const rowToDelete = dataToShow[rowIndex];
+                    if (rowToDelete) {
+                        rowsToDelete.push(rowToDelete);
+                    }
+                });
+                
+                // Move rows to deleted array and remove from mergedData
+                rowsToDelete.forEach(rowToDelete => {
+                    const originalIndex = mergedData.findIndex(row => 
+                        JSON.stringify(row) === JSON.stringify(rowToDelete)
+                    );
+                    
+                    if (originalIndex !== -1) {
+                        deletedRows.push(mergedData[originalIndex]);
+                        mergedData.splice(originalIndex, 1);
+                    }
+                });
+                
+                refreshTable(); // Refresh the table display
+                updateStatusMessage(`${rowsToDelete.length} row(s) deleted. ${mergedData.length} rows remaining.`);
+            }
+        };
+
+        /**
+         * Restores all deleted rows.
+         */
+        const restoreDeletedRows = () => {
+            if (deletedRows.length === 0) {
+                alert('No deleted rows to restore.');
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to restore ${deletedRows.length} deleted row(s)?`)) {
+                // Add all deleted rows back to mergedData
+                mergedData = mergedData.concat(deletedRows);
+                const restoredCount = deletedRows.length;
+                deletedRows = []; // Clear deleted rows array
+                
+                refreshTable(); // Refresh the table display
+                updateStatusMessage(`${restoredCount} row(s) restored. ${mergedData.length} rows total.`);
+            }
+        };
+
+        /**
+         * Refreshes the table with current sort and filter settings.
+         */
+        const refreshTable = () => {
+            let dataToShow = [...mergedData];
+            
+            // Apply unhealthy filter if enabled
+            if (showUnhealthyOnly) {
+                dataToShow = dataToShow.filter(row => {
+                    const status0 = (row['Status0'] || '').toUpperCase();
+                    return !status0.includes('FULL_SERVICE');
+                });
+            }
+            
+            // Apply unequal versions filter if enabled
+            if (showUnequalVersionsOnly) {
+                dataToShow = dataToShow.filter(row => {
+                    // Get the third word from Summary column
+                    const summary = (row['Summary'] || '').trim();
+                    const words = summary.split(/\s+/);
+                    const thirdWord = words.length >= 3 ? words[2] : '';
+                    
+                    if (!thirdWord) return false;
+                    
+                    // Check if any version column has a different value
+                    let hasUnequalVersion = false;
+                    Object.keys(row).forEach(key => {
+                        if (isVersionColumn(key)) {
+                            const versionValue = (row[key] || '').toString();
+                            if (versionValue && !areVersionsEqual(versionValue, thirdWord)) {
+                                hasUnequalVersion = true;
+                            }
+                        }
+                    });
+                    
+                    return hasUnequalVersion;
+                });
+            }
+            
+            // Apply show only CHNGS filter if enabled
+            if (showOnlyChngs) {
+                dataToShow = dataToShow.filter(row => {
+                    const summary = (row['Summary'] || '').trim();
+                    return summary !== '';
+                });
+            }
+            
+            // Apply custom filters
+            Object.keys(customFilters).forEach(column => {
+                const filterValue = customFilters[column].toLowerCase();
+                if (filterValue) {
+                    dataToShow = dataToShow.filter(row => {
+                        const cellValue = (row[column] || '').toString().toLowerCase();
+                        return cellValue.includes(filterValue);
+                    });
+                }
+            });
+            
+            const sortedData = sortData(dataToShow, sortColumn, sortDirection);
+            
+            // Use the current visible headers or fallback to mergedHeaders
+            let headersToUse = visibleHeaders.length > 0 ? visibleHeaders : mergedHeaders;
+            
+            // Filter out empty columns if the toggle is enabled
+            headersToUse = filterEmptyColumns(dataToShow, headersToUse);
+            
+            displayTable(sortedData, headersToUse);
+            
+            // Update button states after table refresh
+            setTimeout(() => {
+                updateDeleteButtonState();
+            }, 100); // Small delay to ensure DOM is updated
+        };
+
+        /**
+         * Reprocesses the data with current settings.
+         */
+        const reprocessData = async () => {
+            if (mergedData.length === 0) return;
+            
+            // Handle versions files if present
+            const versionsFiles = Array.from(versionsFileInput.files);
+            if (versionsFiles.length > 0) {
+                try {
+                    versionsData = [];
+                    versionsFileNames = [];
+                    for (const file of versionsFiles) {
+                        const data = await parseVersionsJSON(file);
+                        versionsData.push({ data, fileName: file.name });
+                        versionsFileNames.push(file.name);
+                    }
+                } catch (error) {
+                    setStatus(`Versions JSON error: ${error.message}`, 'error');
+                    return;
+                }
+            } else {
+                versionsData = []; // Clear versions data if no file selected
+                versionsFileNames = []; // Clear filenames
+            }
+            
+            showUnhealthyOnly = showUnhealthyOnlyToggle.checked;
+            showUnequalVersionsOnly = showUnequalVersionsOnlyToggle.checked;
+            showOnlyChngs = showOnlyChngsToggle.checked;
+            
+            // USE THE SAME NEW ENRICHMENT APPROACH AS handleProcess
+            // Always start with deployment links as the base
+            let baseData = createBaseDataFromDeploymentLinks();
+            let matchesFound = baseData.length;
+            
+            if (baseData.length > 0) {
+                // Step 1: Enrich with Services CSV data (if we have it stored)
+                if (window.originalAllServicesData && window.originalAllServicesData.length > 0) {
+                    baseData = enrichWithServicesData(baseData, window.originalAllServicesData, window.originalServicesFileNames);
+                }
+                
+                // Step 2: Enrich with JIRA information (if we have it stored)
+                if (window.originalJiraData && window.originalJiraData.length > 0) {
+                    baseData = enrichWithJiraData(baseData, window.originalJiraData);
+                }
+                
+                // Step 3: Enrich with Versions JSON data (if files are selected)
+                if (versionsFiles.length > 0 && versionsData.length > 0) {
+                    baseData = enrichWithVersionsData(baseData, versionsData);
+                }
+                
+                mergedData = baseData;
+            }
+            
+            // Build headers from the processed data
+            const allHeaders = new Set();
+            mergedData.forEach(row => {
+                Object.keys(row).forEach(key => allHeaders.add(key));
+            });
+            
+            // Organize headers in logical order (same as handleProcess)
+            const orderedHeaders = ['Service0', 'Jira Link'];
+            
+            if (allHeaders.has('Environment')) {
+                orderedHeaders.push('Environment');
+            }
+            
+            if (window.originalJiraData && window.originalJiraData.length > 0) {
+                const jiraHeaders = Object.keys(window.originalJiraData[0]).filter(h => 
+                    h !== 'Service0' && 
+                    !orderedHeaders.includes(h) &&
+                    !isVersionColumn(h)
+                );
+                orderedHeaders.push(...jiraHeaders);
+            }
+            
+            const versionHeaders = [];
+            const otherHeaders = [];
+            allHeaders.forEach(header => {
+                if (!orderedHeaders.includes(header)) {
+                    if (isVersionColumn(header)) {
+                        versionHeaders.push(header);
+                    } else {
+                        otherHeaders.push(header);
+                    }
+                }
+            });
+            
+            mergedHeaders = [...orderedHeaders, ...otherHeaders, ...versionHeaders];
+            visibleHeaders = [...mergedHeaders];
+            
+            // Update summary text
+            const filesProvided = [];
+            if (window.originalJiraData) filesProvided.push('JIRA');
+            if (window.originalAllServicesData && window.originalAllServicesData.length > 0) {
+                filesProvided.push(`${window.originalServicesFileNames.length} Services CSV`);
+            }
+            if (versionsFiles.length > 0) filesProvided.push(`${versionsFiles.length} Versions JSON`);
+            
+            if (filesProvided.length === 0) {
+                summaryText.textContent = `Displaying ${matchesFound} service(s) from deployment links.`;
+            } else {
+                summaryText.textContent = `Processing complete. Displaying ${matchesFound} service(s) from deployment links, enriched with: ${filesProvided.join(', ')}.`;
+            }
+            
+            // Update UI
+            initializeSortOptions(mergedHeaders);
+            createColumnFilter(mergedHeaders, visibleHeaders);
+            refreshTable();
+        };
+
+        /**
+         * Parses CSV text into an array of objects.
+         * It intelligently finds the header row by looking for a key column.
+         * @param {string} text - The CSV content as a string.
+         * @param {string} keyColumn - A column name that is expected to be in the header.
+         * @returns {Array<Object>} An array of objects representing rows.
+         */
+        const parseCSV = (text, keyColumn) => {
+            const lines = text.trim().split(/\r?\n/);
+            if (lines.length === 0) return [];
+
+            let headerLineIndex = -1;
+            let header = [];
+
+            // Search for the header row in the first 10 lines of the file
+            const searchLimit = Math.min(lines.length, 10);
+            for (let i = 0; i < searchLimit; i++) {
+                // Clean up potential header values
+                const potentialHeader = lines[i].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                if (potentialHeader.includes(keyColumn)) {
+                    headerLineIndex = i;
+                    header = potentialHeader;
+                    break;
+                }
+            }
+
+            // If no header is found, we can't process the file
+            if (headerLineIndex === -1) {
+                return [];
+            }
+
+            const rows = lines
+                .slice(headerLineIndex + 1)
+                .map(line => {
+                    // Ignore empty lines which might be present in the CSV
+                    if (line.trim() === '') return null;
+
+                    const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
+                    const rowObject = {};
+                    header.forEach((col, index) => {
+                        // Create object properties, skipping columns with no header name
+                        if (col) {
+                           rowObject[col] = values[index];
+                        }
+                    });
+                    return rowObject;
+                })
+                .filter(row => row !== null); // Remove the empty lines we marked as null
+
+            return rows;
+        };
+        
+        /**
+         * Reads a file and returns its content as text.
+         * @param {File} file - The file to read.
+         * @returns {Promise<string>} A promise that resolves with the file content.
+         */
+        const readFileAsText = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(file);
+            });
+        };
+
+        /**
+         * Parses and validates a versions JSON file.
+         * @param {File} file - The JSON file to parse.
+         * @returns {Promise<Object>} A promise that resolves with the parsed JSON data.
+         */
+        const parseVersionsJSON = async (file) => {
+            try {
+                const content = await readFileAsText(file);
+                const jsonData = JSON.parse(content);
+                
+                // Validate the JSON structure
+                if (!jsonData.service_versions || !Array.isArray(jsonData.service_versions)) {
+                    throw new Error('JSON file must contain a "service_versions" array');
+                }
+                
+                if (jsonData.service_versions.length === 0) {
+                    throw new Error('service_versions array cannot be empty');
+                }
+                
+                // Validate that each service object has the required structure
+                const firstService = jsonData.service_versions[0];
+                if (!firstService.service) {
+                    throw new Error('Each service object must have a "service" key');
+                }
+                
+                return jsonData;
+            } catch (error) {
+                if (error instanceof SyntaxError) {
+                    throw new Error('Invalid JSON format: ' + error.message);
+                }
+                throw error;
+            }
+        };
+
+        /**
+         * Adds version columns to the merged data based on Service0 matches with versions JSON.
+         * @param {Array<Object>} processedData - The processed data array to enhance.
+         * @param {Object} versionsJson - The parsed versions JSON data.
+         * @returns {Array<Object>} The enhanced data with version columns.
+         */
+        /**
+         * Adds version columns from a versions JSON file to the processed data.
+         * @param {Array<Object>} processedData - The processed data.
+         * @param {Object} versionsJson - The parsed JSON object with service_versions array.
+         * @param {string} versionsFileName - The name of the versions JSON file (optional).
+         * @returns {Array<Object>} The data with added version columns.
+         */
+        const addVersionColumns = (processedData, versionsJson, versionsFileName = '') => {
+            if (!versionsJson || !versionsJson.service_versions) {
+                return processedData;
+            }
+
+            // Extract prefix from filename (everything before the first underscore)
+            let columnPrefix = 'version';
+            if (versionsFileName) {
+                const baseName = versionsFileName.replace(/\.json$/i, '');
+                const underscoreIndex = baseName.indexOf('_');
+                if (underscoreIndex > 0) {
+                    const filePrefix = baseName.substring(0, underscoreIndex);
+                    columnPrefix = `${filePrefix}_version`;
+                } else {
+                    // If no underscore in filename, just use the filename as prefix
+                    columnPrefix = `${baseName}_version`;
+                }
+            }
+
+            // Create a lookup map for faster service matching
+            const serviceVersionMap = {};
+            versionsJson.service_versions.forEach(serviceObj => {
+                if (serviceObj.service) {
+                    serviceVersionMap[serviceObj.service.toLowerCase()] = serviceObj;
+                }
+            });
+
+            // Process each row to add version columns
+            const enhancedData = processedData.map(row => {
+                const newRow = { ...row };
+                const service0 = (row['Service0'] || '').trim();
+                
+                if (service0 && service0 !== 'Data not found !') {
+                    const serviceLower = service0.toLowerCase();
+                    const matchedService = serviceVersionMap[serviceLower];
+                    
+                    if (matchedService) {
+                        // Add all version columns from the matched service with the prefix
+                        Object.keys(matchedService).forEach(key => {
+                            if (key !== 'service') { // Don't duplicate the service column
+                                const columnName = `${columnPrefix}_${key}`;
+                                newRow[columnName] = matchedService[key] || '';
+                            }
+                        });
+                    }
+                }
+                
+                return newRow;
+            });
+
+            return enhancedData;
+        };
+
+        /**
+         * Applies multiple version files to the processed data.
+         * @param {Array<Object>} processedData - The processed data.
+         * @param {Array<Object>} versionsDataArray - Array of objects with {data, fileName}.
+         * @returns {Array<Object>} The data with all version columns added.
+         */
+        const addAllVersionColumns = (processedData, versionsDataArray) => {
+            if (!versionsDataArray || versionsDataArray.length === 0) {
+                return processedData;
+            }
+            
+            let enhancedData = processedData;
+            
+            // Apply each version file sequentially
+            for (const versionInfo of versionsDataArray) {
+                enhancedData = addVersionColumns(enhancedData, versionInfo.data, versionInfo.fileName);
+            }
+            
+            return enhancedData;
+        };
+
+        /**
+         * Processes JSON files without Services CSV, using deployment links to filter services.
+         * Creates one row per service and adds columns from all JSON files.
+         * @param {Array<Object>} versionsDataArray - Array of objects with {data, fileName}.
+         * @param {Array<Object>} jiraData - Optional JIRA data.
+         * @returns {{mergedData: Array<Object>, matchesFound: number}} The processed data and match count.
+         */
+        const processJSONWithoutServices = (versionsDataArray, jiraData = null) => {
+            const deploymentLinks = getDeploymentLinks();
+            
+            // Extract service names from deployment links using the helper function
+            const deploymentServiceNames = new Set();
+            deploymentLinks.forEach(link => {
+                const serviceName = extractServiceNameFromLink(link);
+                if (serviceName) {
+                    let nameToCheck = serviceName.toLowerCase();
+                    if (nameToCheck.endsWith('-headless')) {
+                        nameToCheck = nameToCheck.replace(/-headless$/, '');
+                    }
+                    deploymentServiceNames.add(nameToCheck);
+                }
+            });
+            
+            // Build a map of services: service name -> service data from all JSON files
+            const serviceMap = new Map();
+            
+            // First pass: collect all services from all JSON files
+            versionsDataArray.forEach(versionInfo => {
+                const { data: versionsJson, fileName } = versionInfo;
+                
+                if (!versionsJson || !versionsJson.service_versions) return;
+                
+                versionsJson.service_versions.forEach(serviceObj => {
+                    const serviceName = (serviceObj.service || '').toLowerCase();
+                    
+                    // Check if this service is in deployment links
+                    let serviceToCheck = serviceName;
+                    if (serviceToCheck.endsWith('-headless')) {
+                        serviceToCheck = serviceToCheck.replace(/-headless$/, '');
+                    }
+                    
+                    if (deploymentServiceNames.has(serviceToCheck)) {
+                        if (!serviceMap.has(serviceName)) {
+                            serviceMap.set(serviceName, {
+                                originalName: serviceObj.service,
+                                jsonData: []
+                            });
+                        }
+                        serviceMap.get(serviceName).jsonData.push({ serviceObj, fileName });
+                    }
+                });
+            });
+            
+            // Second pass: create rows with columns from all JSON files
+            const allProcessedData = [];
+            
+            serviceMap.forEach((serviceInfo, serviceName) => {
+                const newRow = {
+                    'Service0': serviceInfo.originalName
+                };
+                
+                // If JIRA data is provided, try to match and add JIRA columns
+                if (jiraData) {
+                    const matchingJiraRow = jiraData.find(jiraRow => {
+                        const summary = (jiraRow['Summary'] || '').toLowerCase();
+                        const serviceNameRegex = new RegExp('(?:^|\\s)' + serviceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)', 'i');
+                        return serviceNameRegex.test(summary);
+                    });
+                    
+                    if (matchingJiraRow) {
+                        // Add all JIRA columns
+                        Object.assign(newRow, matchingJiraRow);
+                    }
+                }
+                
+                // Add version columns from each JSON file
+                serviceInfo.jsonData.forEach(({ serviceObj, fileName }) => {
+                    // Extract prefix from filename
+                    const baseName = fileName.replace(/\.json$/i, '');
+                    const underscoreIndex = baseName.indexOf('_');
+                    let columnPrefix = 'version';
+                    if (underscoreIndex > 0) {
+                        columnPrefix = `${baseName.substring(0, underscoreIndex)}_version`;
+                    } else {
+                        columnPrefix = `${baseName}_version`;
+                    }
+                    
+                    // Add version columns with prefix
+                    Object.keys(serviceObj).forEach(key => {
+                        if (key !== 'service') {
+                            newRow[`${columnPrefix}_${key}`] = serviceObj[key] || '';
+                        }
+                    });
+                });
+                
+                allProcessedData.push(newRow);
+            });
+            
+            return { mergedData: allProcessedData, matchesFound: serviceMap.size };
+        };
+
+        /**
+         * Processes Services data without JIRA file, filtering by deployment links.
+         * @param {Array<Array<Object>>} allServicesData - Array of parsed Services CSV data arrays.
+         * @param {Array<string>} fileNames - Array of service file names.
+         * @returns {{mergedData: Array<Object>, matchesFound: number}} The filtered data and match count.
+         */
+        const processServicesDataWithoutJira = (allServicesData, fileNames) => {
+            const deploymentLinks = getDeploymentLinks();
+            let totalMatchesFound = 0;
+            const allProcessedData = [];
+            
+            // Extract service names from deployment links using the helper function
+            const deploymentServiceNames = new Set();
+            deploymentLinks.forEach(link => {
+                const serviceName = extractServiceNameFromLink(link);
+                if (serviceName) {
+                    let nameToCheck = serviceName.toLowerCase();
+                    // Remove -headless suffix if present
+                    if (nameToCheck.endsWith('-headless')) {
+                        nameToCheck = nameToCheck.replace(/-headless$/, '');
+                    }
+                    deploymentServiceNames.add(nameToCheck);
+                }
+            });
+            
+            // Process each services file
+            allServicesData.forEach((servicesData, fileIndex) => {
+                const currentFileName = fileNames[fileIndex];
+                
+                servicesData.forEach(serviceRow => {
+                    const newRow = { ...serviceRow };
+                    let service0 = (serviceRow['Service0'] || '').trim();
+                    
+                    // Add Environment column
+                    newRow['Environment'] = currentFileName;
+                    
+                    // Check if Service0 matches any service in deployment links
+                    if (service0 && service0 !== 'Data not found !') {
+                        let serviceToCheck = service0.toLowerCase();
+                        
+                        // Remove -headless suffix if present for comparison
+                        if (serviceToCheck.endsWith('-headless')) {
+                            serviceToCheck = serviceToCheck.replace(/-headless$/, '');
+                        }
+                        
+                        // Check if this service is in any deployment link
+                        if (deploymentServiceNames.has(serviceToCheck)) {
+                            allProcessedData.push(newRow);
+                            totalMatchesFound++;
+                        }
+                    }
+                });
+            });
+            
+            // Add version columns if versions data is available
+            const finalProcessedData = versionsData.length > 0 ? addAllVersionColumns(allProcessedData, versionsData) : allProcessedData;
+            
+            return { mergedData: finalProcessedData, matchesFound: totalMatchesFound };
+        };
+
+        /**
+         * Merges JIRA data with multiple Services files.
+         * @param {Array<Object>} jiraData - Parsed JIRA CSV data.
+         * @param {Array<Array<Object>>} allServicesData - Array of parsed Services CSV data arrays.
+         * @param {Array<string>} fileNames - Array of service file names.
+         * @returns {{mergedData: Array<Object>, matchesFound: number}} The merged data and match count.
+         */
+        const processMultipleServicesData = (jiraData, allServicesData, fileNames) => {
+            let totalMatchesFound = 0;
+            const allProcessedData = [];
+            
+            // Process each services file with the JIRA data
+            allServicesData.forEach((servicesData, fileIndex) => {
+                const currentFileName = fileNames[fileIndex];
+                
+                const processedData = jiraData.map(jiraRow => {
+                    const newRow = { ...jiraRow };
+                    const summary = (jiraRow['Summary'] || '').toLowerCase();
+                    let matchFoundForRow = false;
+
+                    // Add Environment column with the current services file name
+                    newRow['Environment'] = currentFileName;
+
+                    if (summary) {
+                        for (const serviceRow of servicesData) {
+                            let serviceName = (serviceRow['Service0'] || '').toLowerCase();
+                            
+                            // Always ignore headless suffixes
+                            if (serviceName.endsWith('-headless')) {
+                                serviceName = serviceName.replace(/-headless$/, '');
+                            }
+                            
+                            if (serviceName) {
+                                // Use strict matching to ensure exact service name match
+                                // Look for the service name as a complete entity, not as part of a larger hyphenated name
+                                // This prevents "manager" from matching "data-sources-manager"
+                                const serviceNameRegex = new RegExp('(?:^|\\s)' + serviceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)', 'i');
+                                
+                                if (serviceNameRegex.test(summary)) {
+                                    // Match found, extend the JIRA row with service data
+                                    Object.assign(newRow, serviceRow);
+                                    totalMatchesFound++;
+                                    matchFoundForRow = true;
+                                    break; // Stop after the first match for this JIRA row
+                                }
+                            }
+                        }
+                    }
+
+                    return newRow;
+                });
+                
+                // Add all rows from this services file to the combined results
+                allProcessedData.push(...processedData);
+            });
+            
+            // Check and populate empty Status0 and Service0 fields
+            allProcessedData.forEach(row => {
+                const status0Value = (row['Status0'] || '').trim();
+                if (!status0Value) {
+                    row['Status0'] = 'Data not found !';
+                }
+                
+                const service0Value = (row['Service0'] || '').trim();
+                if (!service0Value) {
+                    // Try to extract service name from Summary field (word after "Deploy")
+                    const summaryValue = (row['Summary'] || '').trim();
+                    if (summaryValue) {
+                        // Look for the word after "Deploy" (case insensitive)
+                        // Include hyphens as part of the word: [\w-]+ matches letters, numbers, underscores, and hyphens
+                        const deployMatch = summaryValue.match(/deploy\s+([\w-]+)/i);
+                        if (deployMatch && deployMatch[1]) {
+                            row['Service0'] = deployMatch[1];
+                        } else {
+                            row['Service0'] = 'Data not found !';
+                        }
+                    } else {
+                        row['Service0'] = 'Data not found !';
+                    }
+                }
+            });
+
+            // Add version columns if versions data is available
+            const finalProcessedData = versionsData.length > 0 ? addAllVersionColumns(allProcessedData, versionsData) : allProcessedData;
+            
+            return { mergedData: finalProcessedData, matchesFound: totalMatchesFound };
+        };
+
+        /**
+         * Applies environment name filtering using regex if configured.
+         * @param {string} envValue - The original environment value.
+         * @returns {string} The filtered environment value.
+         */
+        const applyEnvFilter = (envValue) => {
+            const regexPattern = localStorage.getItem('filterEnvRegex');
+            if (!regexPattern || !envValue) {
+                return envValue;
+            }
+            
+            try {
+                const regex = new RegExp(regexPattern);
+                const match = envValue.match(regex);
+                if (match && match[1]) {
+                    return match[1]; // Return first capture group
+                }
+                return envValue; // Return original if no match
+            } catch (e) {
+                // Invalid regex, return original value
+                console.error('Invalid regex pattern:', e);
+                return envValue;
+            }
+        };
+
+        /**
+         * Filters out headers that have no values in any row.
+         * @param {Array<Object>} data - The data rows.
+         * @param {Array<string>} headers - All headers.
+         * @returns {Array<string>} Headers with at least one non-empty value.
+         */
+        const filterEmptyColumns = (data, headers) => {
+            if (!ignoreEmptyColumnsToggle.checked) {
+                return headers; // Return all headers if toggle is off
+            }
+            
+            return headers.filter(header => {
+                // Check if at least one row has a non-empty value for this column
+                return data.some(row => {
+                    const value = row[header];
+                    return value !== null && value !== undefined && value !== '';
+                });
+            });
+        };
+
+        /**
+         * Displays the merged data in an HTML table.
+         * @param {Array<Object>} data - The merged data.
+         * @param {Array<string>} headers - The headers for the table.
+         */
+        const displayTable = (data, headers) => {
+            resultsTable.innerHTML = ''; // Clear previous results
+            
+            // Create table head
+            const thead = document.createElement('thead');
+            thead.className = "text-xs text-slate-700 uppercase bg-slate-50 sticky top-0";
+            const headerRow = document.createElement('tr');
+            
+            // Add checkbox column header
+            const checkboxHeader = document.createElement('th');
+            checkboxHeader.scope = 'col';
+            checkboxHeader.className = 'px-6 py-3 w-16';
+            const selectAllCheckbox = document.createElement('input');
+            selectAllCheckbox.type = 'checkbox';
+            selectAllCheckbox.id = 'select-all';
+            selectAllCheckbox.className = 'rounded border-gray-300';
+            selectAllCheckbox.onchange = toggleSelectAll;
+            checkboxHeader.appendChild(selectAllCheckbox);
+            headerRow.appendChild(checkboxHeader);
+            
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.scope = 'col';
+                th.className = 'px-6 py-3 sort-header';
+                th.setAttribute('data-column', headerText);
+                
+                // Add header text and sort indicator
+                const headerContent = document.createElement('div');
+                headerContent.className = 'flex items-center justify-between';
+                headerContent.innerHTML = `
+                    <span>${headerText}</span>
+                    <span class="sort-indicator ${sortColumn === headerText ? 'active' : ''}">${
+                        sortColumn === headerText 
+                            ? (sortDirection === 'asc' ? '↑' : '↓')
+                            : '↕'
+                    }</span>
+                `;
+                th.appendChild(headerContent);
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            resultsTable.appendChild(thead);
+
+            // Create table body
+            const tbody = document.createElement('tbody');
+            data.forEach((row, rowIndex) => {
+                const tr = document.createElement('tr');
+                tr.className = rowIndex % 2 === 0 ? 'bg-white border-b' : 'bg-slate-50 border-b';
+                tr.setAttribute('data-row-index', rowIndex);
+                
+                // Add checkbox cell
+                const checkboxCell = document.createElement('td');
+                checkboxCell.className = 'px-6 py-4';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'row-checkbox rounded border-gray-300';
+                checkbox.setAttribute('data-row-index', rowIndex);
+                checkbox.onchange = updateDeleteButtonState;
+                checkboxCell.appendChild(checkbox);
+                tr.appendChild(checkboxCell);
+                
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    td.className = 'px-6 py-4 editable-cell';
+                    let cellValue = row[header] || '';
+                    
+                    // Apply environment filter if this is the Environment column
+                    if (header === 'Environment' && cellValue) {
+                        cellValue = applyEnvFilter(cellValue);
+                    }
+                    
+                    // Check if this is a Jira Link column and contains HTML
+                    if (header === 'Jira Link' && cellValue.includes('<a href=')) {
+                        td.innerHTML = cellValue; // Render HTML for links
+                        td.classList.remove('editable-cell'); // Don't make links editable
+                    } else {
+                        td.textContent = cellValue; // Use text content for regular cells
+                    }
+                    
+                    // Check if this is a version column and if it doesn't match the third word from Summary
+                    if (isVersionColumn(header) && cellValue) {
+                        const summary = (row['Summary'] || '').trim();
+                        const words = summary.split(/\s+/);
+                        const thirdWord = words.length >= 3 ? words[2] : '';
+                        
+                        if (thirdWord && !areVersionsEqual(cellValue, thirdWord)) {
+                            td.style.color = 'red';
+                            td.style.fontWeight = 'bold';
+                        }
+                    }
+                    
+                    td.setAttribute('data-row', rowIndex);
+                    td.setAttribute('data-column', header);
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            resultsTable.appendChild(tbody);
+        };
+        
+        /**
+         * Converts an array of objects to a CSV string.
+         * @param {Array<Object>} data - The data to convert.
+         * @param {Array<string>} headers - The headers for the CSV.
+         * @returns {string} The CSV content as a string.
+         */
+        const convertToCSV = (data, headers) => {
+            const headerRow = headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',');
+            const bodyRows = data.map(row => {
+                return headers.map(header => {
+                    const value = row[header] === undefined || row[header] === null ? '' : String(row[header]);
+                    return `"${value.replace(/"/g, '""')}"`;
+                }).join(',');
+            });
+            return [headerRow, ...bodyRows].join('\n');
+        };
+
+        /**
+         * Triggers a file download.
+         * @param {string} content - The content of the file.
+         * @param {string} fileName - The name of the file to download.
+         * @param {string} contentType - The MIME type of the file.
+         */
+        const downloadFile = (content, fileName, contentType) => {
+            const a = document.createElement("a");
+            const file = new Blob([content], { type: contentType });
+            a.href = URL.createObjectURL(file);
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        };
+
+        /**
+         * Copies the table as an image to clipboard.
+         */
+        const copyTableAsImage = async () => {
+            const tableContainer = document.querySelector('.table-container');
+            
+            if (!tableContainer) {
+                setStatus('Table not found for image capture.');
+                return;
+            }
+
+            setStatus('Capturing table image...', 'loading');
+
+            try {
+                // Store original styles
+                const originalStyles = {
+                    maxHeight: tableContainer.style.maxHeight,
+                    overflow: tableContainer.style.overflow,
+                    height: tableContainer.style.height
+                };
+
+                // Temporarily remove height constraints to show full table
+                tableContainer.style.maxHeight = 'none';
+                tableContainer.style.overflow = 'visible';
+                tableContainer.style.height = 'auto';
+
+                // Wait a bit for the layout to adjust
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // Configure html2canvas options for better quality
+                const canvas = await html2canvas(tableContainer, {
+                    backgroundColor: '#ffffff',
+                    scale: 2, // Higher resolution
+                    useCORS: true,
+                    allowTaint: true,
+                    scrollX: 0,
+                    scrollY: 0,
+                    width: tableContainer.scrollWidth,
+                    height: tableContainer.scrollHeight,
+                    windowWidth: tableContainer.scrollWidth,
+                    windowHeight: tableContainer.scrollHeight
+                });
+
+                // Restore original styles
+                tableContainer.style.maxHeight = originalStyles.maxHeight;
+                tableContainer.style.overflow = originalStyles.overflow;
+                tableContainer.style.height = originalStyles.height;
+
+                // Convert canvas to blob
+                canvas.toBlob(async (blob) => {
+                    try {
+                        // Use the Clipboard API to copy the image
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                [blob.type]: blob
+                            })
+                        ]);
+                        
+                        setStatus('Table image copied to clipboard!', 'success');
+                        setTimeout(() => setStatus(''), 2000);
+                    } catch (clipboardError) {
+                        console.error('Clipboard API failed:', clipboardError);
+                        
+                        // Fallback: create a download link
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'table-image.png';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        
+                        setStatus('Image saved as download (clipboard not supported)', 'success');
+                        setTimeout(() => setStatus(''), 3000);
+                    }
+                }, 'image/png');
+
+            } catch (error) {
+                console.error('Failed to capture table as image:', error);
+                setStatus('Failed to capture table image. Please try again.');
+                
+                // Make sure to restore styles even if there's an error
+                const tableContainer = document.querySelector('.table-container');
+                if (tableContainer) {
+                    tableContainer.style.maxHeight = '50vh';
+                    tableContainer.style.overflow = 'auto';
+                    tableContainer.style.height = '';
+                }
+            }
+        };
+
+        /**
+         * Sets the status message and style.
+         * @param {string} message - The message to display.
+         * @param {'error' | 'loading' | 'success'} type - The type of message.
+         */
+        const setStatus = (message, type = 'error') => {
+            statusContainer.innerHTML = ''; // Clear previous status
+            if (!message) return;
+            
+            const statusDiv = document.createElement('div');
+            let classes = 'p-4 rounded-lg text-sm ';
+            
+            if (type === 'error') {
+                classes += 'bg-red-100 text-red-700';
+                statusDiv.textContent = `Error: ${message}`;
+            } else if (type === 'loading') {
+                classes += 'bg-blue-100 text-blue-700 flex items-center justify-center gap-3';
+                const loader = document.createElement('div');
+                loader.className = 'loader';
+                statusDiv.appendChild(loader);
+                statusDiv.append(message);
+            } else { // success
+                classes += 'bg-green-100 text-green-700';
+                statusDiv.textContent = message;
+            }
+            
+            statusDiv.className = classes;
+            statusContainer.appendChild(statusDiv);
+        };
+
+        /**
+         * Updates the status message (alias for setStatus with success type).
+         * @param {string} message - The message to display.
+         */
+        const updateStatusMessage = (message) => {
+            setStatus(message, 'success');
+        };
+
+        // --- Settings Functions ---
+
+        /**
+         * Default deployment links shared with all users.
+         * Users can still override these locally.
+         */
+        const DEFAULT_DEPLOYMENT_LINKS = `https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_analytics-appstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_analytics-connstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_analytics-events/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_analytics-lmm/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_analytics-measures/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_api-events-feed/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_clickhouse-backup/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_dwh-phase1/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_dwh-phase2/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_events-log/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_push-events-vector/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_xdr-actions/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_xdr-incident-generator/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_xdr-incident-simulator/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/analytics-xdr/job/deploy_xdr-story/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_aggregation-service/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-flow-consumer/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-infra-appstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-infra-connstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-infra-events/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-infra-facetstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-infra-lmm/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-infra-measures/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-inspector/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-maintenance/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-simulator/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_data-sources-manager/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_events-batch-aggregator/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_events-dispatcher/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_events-nikon/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion-appstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion-connstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion-events/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion-facetstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion-hardware/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion-lmm/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_ingestion-measures/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_measures-processing/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquet-partitioner/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquet-partitioner-appstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquet-partitioner-connstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquet-partitioner-events/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquet-partitioner-facetstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquet-partitioner-flows/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquet-partitioner-lmm/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquety-connstats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquety-lmm/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_parquety-stats/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_piper/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_rule-evaluator/
+https://maker.catonet.works/user/8b16e08b-d3cd-480b-bdbb-683a6237249b/my-views/view/Data%20Automation%20Responsibility%20Jobs/job/eks/job/data-infra/job/deploy_throttling-service/`;
+
+        /**
+         * Default environment regex pattern shared with all users.
+         */
+        const DEFAULT_ENV_REGEX = `\\.([^.]+(?:\\.[^.]+)*?)\\.catonet\\.works`;
+
+
+
+        /**
+         * Loads Jira deployment links from localStorage.
+         */
+        const loadJiraDeploymentLinks = () => {
+            // Check if user has local overrides
+            const savedLinks = localStorage.getItem('jiraDeploymentLinks');
+            const savedBuildLinks = localStorage.getItem('jiraBuildLinks');
+            const savedRegex = localStorage.getItem('filterEnvRegex');
+            const savedJenkinsUrl = localStorage.getItem('jenkinsDeploysUrl');
+            const savedJenkinsUsername = localStorage.getItem('jenkinsApiUsername');
+            const savedJenkinsPass = localStorage.getItem('jenkinsApiPass');
+            
+            // Load deployment links (localStorage or defaults)
+            if (savedLinks) {
+                jiraDeploymentLinksInput.value = savedLinks;
+            } else {
+                jiraDeploymentLinksInput.value = DEFAULT_DEPLOYMENT_LINKS;
+            }
+            
+            // Load build links (localStorage or empty)
+            if (savedBuildLinks) {
+                jiraBuildLinksInput.value = savedBuildLinks;
+            } else {
+                jiraBuildLinksInput.value = '';
+            }
+            
+            // Load Jenkins configuration (localStorage or empty)
+            if (savedJenkinsUrl) {
+                jenkinsDeploysUrlInput.value = savedJenkinsUrl;
+            } else {
+                jenkinsDeploysUrlInput.value = '';
+            }
+            
+            if (savedJenkinsUsername) {
+                jenkinsApiUsernameInput.value = savedJenkinsUsername;
+            } else {
+                jenkinsApiUsernameInput.value = '';
+            }
+            
+            if (savedJenkinsPass) {
+                jenkinsApiPassInput.value = savedJenkinsPass;
+            } else {
+                jenkinsApiPassInput.value = '';
+            }
+            
+            // Load regex (localStorage or defaults)
+            if (savedRegex) {
+                filterEnvRegexInput.value = savedRegex;
+            } else {
+                filterEnvRegexInput.value = DEFAULT_ENV_REGEX;
+            }
+            
+            // Update refresh button state
+            updateRefreshButtonState();
+        };
+
+        /**
+         * Saves Jira deployment links to localStorage.
+         */
+        const saveJiraDeploymentLinks = () => {
+            const links = jiraDeploymentLinksInput.value;
+            localStorage.setItem('jiraDeploymentLinks', links);
+            
+            const buildLinks = jiraBuildLinksInput.value;
+            localStorage.setItem('jiraBuildLinks', buildLinks);
+            
+            const regex = filterEnvRegexInput.value;
+            localStorage.setItem('filterEnvRegex', regex);
+            
+            // Save Jenkins configuration
+            const jenkinsUrl = jenkinsDeploysUrlInput.value;
+            localStorage.setItem('jenkinsDeploysUrl', jenkinsUrl);
+            
+            const jenkinsUsername = jenkinsApiUsernameInput.value;
+            localStorage.setItem('jenkinsApiUsername', jenkinsUsername);
+            
+            const jenkinsPass = jenkinsApiPassInput.value;
+            localStorage.setItem('jenkinsApiPass', jenkinsPass);
+            
+            setStatus('Settings saved successfully!', 'success');
+            setTimeout(() => setStatus(''), 2000);
+        };
+
+        /**
+         * Opens the settings modal.
+         */
+        const openSettingsModal = () => {
+            loadJiraDeploymentLinks();
+            settingsModal.classList.remove('hidden');
+            // Focus on the textarea for better UX
+            setTimeout(() => {
+                jiraDeploymentLinksInput.focus();
+            }, 100);
+        };
+
+        /**
+         * Closes the settings modal and saves the data.
+         */
+        const closeSettingsModal = () => {
+            saveJiraDeploymentLinks();
+            settingsModal.classList.add('hidden');
+            
+            // Refresh the table to apply any environment filter changes
+            if (mergedData.length > 0) {
+                refreshTable();
+            }
+        };
+
+        /**
+         * Updates the refresh button state based on Jenkins configuration.
+         */
+        const updateRefreshButtonState = () => {
+            const url = jenkinsDeploysUrlInput.value.trim();
+            const username = jenkinsApiUsernameInput.value.trim();
+            const pass = jenkinsApiPassInput.value.trim();
+            
+            // Enable button only if all three parameters are provided
+            if (url && username && pass) {
+                refreshBuildLinksBtn.disabled = false;
+                refreshBuildLinksBtn.title = 'Fetch build links from Jenkins API';
+            } else {
+                refreshBuildLinksBtn.disabled = true;
+                refreshBuildLinksBtn.title = 'Configure Jenkins API credentials to enable';
+            }
+        };
+
+        /**
+         * Updates Jenkins configuration section visibility.
+         * Shows it only on explicit user action or error.
+         */
+        const updateJenkinsConfigVisibility = () => {
+            // This function is now only called on errors
+            // Config section stays closed by default
+        };
+
+        /**
+         * Fetches build links from Jenkins API and populates the textarea.
+         */
+        const refreshBuildLinks = async () => {
+            const url = jenkinsDeploysUrlInput.value.trim();
+            const username = jenkinsApiUsernameInput.value.trim();
+            const pass = jenkinsApiPassInput.value.trim();
+            
+            if (!url || !username || !pass) {
+                alert('Please configure Jenkins API credentials first.');
+                jenkinsConfigSection.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                // Show loading state
+                refreshBuildLinksBtn.disabled = true;
+                refreshBuildLinksBtn.innerHTML = `
+                    <svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Loading...
+                `;
+                
+                // Create Basic Auth header
+                const authHeader = 'Basic ' + btoa(username + ':' + pass);
+                
+                // Fetch data from Jenkins API
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': authHeader,
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Extract URLs from jobs array
+                if (data.jobs && Array.isArray(data.jobs)) {
+                    const urls = data.jobs.map(job => job.url).filter(url => url);
+                    
+                    // Clear previous values and set new ones in Jira Deployment Links
+                    jiraDeploymentLinksInput.value = urls.join('\n');
+                    
+                    setStatus(`Successfully fetched ${urls.length} deployment links from Jenkins!`, 'success');
+                    setTimeout(() => setStatus(''), 3000);
+                } else {
+                    throw new Error('Invalid response format: "jobs" array not found');
+                }
+                
+            } catch (error) {
+                console.error('Error fetching Jenkins build links:', error);
+                alert(`Failed to fetch build links: ${error.message}\n\nPlease check your Jenkins URL and credentials.`);
+                
+                // Show config section on error
+                jenkinsConfigSection.classList.remove('hidden');
+                
+                setStatus('Failed to fetch build links from Jenkins', 'error');
+                setTimeout(() => setStatus(''), 3000);
+            } finally {
+                // Restore button state
+                refreshBuildLinksBtn.innerHTML = `
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Refresh
+                `;
+                updateRefreshButtonState();
+            }
+        };
+
+
+
+        // --- Jira Links Functions ---
+
+        /**
+         * Gets deployment links from localStorage settings.
+         * @returns {Array<string>} Array of deployment links.
+         */
+        /**
+         * Gets deployment links from localStorage settings.
+         * @returns {Array<string>} Array of deployment links.
+         */
+        /**
+         * Gets deployment links from localStorage settings or global config.
+         * @returns {Array<string>} Array of deployment links.
+         */
+        const getDeploymentLinks = () => {
+            const savedLinks = localStorage.getItem('jiraDeploymentLinks');
+            let linksToUse = savedLinks;
+            
+            // If no local override, use global config
+            if (!linksToUse && globalConfig && globalConfig.deploymentLinks) {
+                linksToUse = globalConfig.deploymentLinks.join('\n');
+            }
+            
+            // Fallback to defaults
+            if (!linksToUse) {
+                linksToUse = DEFAULT_DEPLOYMENT_LINKS;
+            }
+            
+            if (!linksToUse || linksToUse.trim() === '') {
+                return [];
+            }
+            return linksToUse.split('\n').map(link => link.trim()).filter(link => link !== '');
+        };
+
+        /**
+         * Extracts service name from a deployment link URL.
+         * Pattern: /deploy_SERVICE_NAME/ in the URL
+         * @param {string} link - The deployment link URL.
+         * @returns {string|null} The extracted service name or null if not found.
+         */
+        const extractServiceNameFromLink = (link) => {
+            // Match pattern like: /deploy_analytics-appstats/ or /deploy_push-events-vector/
+            // The service name comes after "deploy_" and before the next "/" or end of URL
+            const match = link.match(/\/deploy_([^\/\?#]+)\/?/);
+            if (match && match[1]) {
+                return match[1]; // Return as-is (preserving hyphens, underscores)
+            }
+            return null;
+        };
+
+        /**
+         * Creates base data from deployment links - this is the foundation for all processing.
+         * @returns {Array<Object>} Array of base row objects with Service0 and Jira Link.
+         */
+        const createBaseDataFromDeploymentLinks = () => {
+            const deploymentLinks = getDeploymentLinks();
+            const baseData = [];
+            const processedServices = new Set();
+            
+            deploymentLinks.forEach(link => {
+                const serviceName = extractServiceNameFromLink(link);
+                if (serviceName && !processedServices.has(serviceName.toLowerCase())) {
+                    baseData.push({
+                        'Service0': serviceName,
+                        'Jira Link': `<a href="${link}" target="_blank" rel="noopener noreferrer">Jira Link</a>`
+                    });
+                    processedServices.add(serviceName.toLowerCase());
+                }
+            });
+            
+            return baseData;
+        };
+
+        /**
+         * Enriches base data with JIRA information by matching service names.
+         * @param {Array<Object>} baseData - The base data from deployment links.
+         * @param {Array<Object>} jiraData - Parsed JIRA CSV data.
+         * @returns {Array<Object>} Enriched data with JIRA columns added.
+         */
+        const enrichWithJiraData = (baseData, jiraData) => {
+            if (!jiraData || jiraData.length === 0) return baseData;
+            
+            return baseData.map(row => {
+                const serviceName = (row['Service0'] || '').toLowerCase();
+                // Remove headless suffix for comparison
+                const serviceToCheck = serviceName.replace(/-headless$/, '');
+                
+                // Find matching JIRA row by checking if Summary contains the service name
+                const matchingJiraRow = jiraData.find(jiraRow => {
+                    const summary = (jiraRow['Summary'] || '').toLowerCase();
+                    // Check if service name appears in the summary
+                    const serviceNameRegex = new RegExp('(?:^|\\s|-)' + serviceToCheck.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/-/g, '[-_]') + '(?:\\s|$|-|_)', 'i');
+                    return serviceNameRegex.test(summary);
+                });
+                
+                if (matchingJiraRow) {
+                    // Add JIRA columns to the row, but PRESERVE existing columns (don't overwrite)
+                    const enrichedRow = { ...row };
+                    Object.keys(matchingJiraRow).forEach(key => {
+                        // Only add the column if it doesn't already exist in the base row
+                        if (!(key in enrichedRow)) {
+                            enrichedRow[key] = matchingJiraRow[key];
+                        }
+                    });
+                    return enrichedRow;
+                }
+                
+                return row;
+            });
+        };
+
+        /**
+         * Enriches base data with Services CSV information by matching Service0.
+         * @param {Array<Object>} baseData - The base data to enrich.
+         * @param {Array<Array<Object>>} allServicesData - Array of parsed Services CSV data arrays.
+         * @param {Array<string>} fileNames - Array of service file names.
+         * @returns {Array<Object>} Enriched data with Services columns added.
+         */
+        const enrichWithServicesData = (baseData, allServicesData, fileNames) => {
+            if (!allServicesData || allServicesData.length === 0) return baseData;
+            
+            const enrichedData = [];
+            const servicesWithMatches = new Set();
+            
+            // For each base service, find matching rows in each services file
+            baseData.forEach(baseRow => {
+                const baseServiceName = (baseRow['Service0'] || '').toLowerCase();
+                // Remove headless suffix for comparison
+                const baseToCheck = baseServiceName.replace(/-headless$/, '');
+                let foundMatch = false;
+                
+                // Check each services file
+                allServicesData.forEach((servicesData, fileIndex) => {
+                    const fileName = fileNames[fileIndex];
+                    
+                    // Find matching service in this file
+                    const matchingService = servicesData.find(serviceRow => {
+                        const serviceName = (serviceRow['Service0'] || '').toLowerCase();
+                        // Remove headless suffix for comparison
+                        const serviceToCheck = serviceName.replace(/-headless$/, '');
+                        return serviceToCheck === baseToCheck || serviceToCheck.replace(/-/g, '_') === baseToCheck.replace(/-/g, '_');
+                    });
+                    
+                    if (matchingService) {
+                        // Create enriched row - PRESERVE base data, only ADD new columns
+                        const enrichedRow = { ...baseRow };
+                        Object.keys(matchingService).forEach(key => {
+                            // Only add columns that don't already exist
+                            if (!(key in enrichedRow)) {
+                                enrichedRow[key] = matchingService[key];
+                            }
+                        });
+                        // Always add Environment column (it's unique per file)
+                        enrichedRow['Environment'] = fileName;
+                        enrichedData.push(enrichedRow);
+                        foundMatch = true;
+                        servicesWithMatches.add(baseServiceName);
+                    }
+                });
+                
+                // If no match found in any Services CSV file, keep the base row
+                if (!foundMatch) {
+                    enrichedData.push(baseRow);
+                }
+            });
+            
+            return enrichedData;
+        };
+
+        /**
+         * Enriches base data with versions from JSON files.
+         * @param {Array<Object>} baseData - The base data to enrich.
+         * @param {Array<Object>} versionsDataArray - Array of version data objects.
+         * @returns {Array<Object>} Enriched data with version columns added.
+         */
+        const enrichWithVersionsData = (baseData, versionsDataArray) => {
+            if (!versionsDataArray || versionsDataArray.length === 0) return baseData;
+            
+            return baseData.map(row => {
+                const serviceName = (row['Service0'] || '').toLowerCase();
+                const enrichedRow = { ...row };
+                
+                // Process each JSON file
+                versionsDataArray.forEach(versionInfo => {
+                    const { data: versionsJson, fileName } = versionInfo;
+                    
+                    if (!versionsJson || !versionsJson.service_versions) return;
+                    
+                    // Find matching service in this JSON file
+                    const matchingService = versionsJson.service_versions.find(serviceObj => {
+                        const jsonServiceName = (serviceObj.service || '').toLowerCase();
+                        const serviceToCheck = jsonServiceName.replace(/-headless$/, '');
+                        const baseToCheck = serviceName.replace(/-headless$/, '');
+                        return serviceToCheck === baseToCheck || serviceToCheck.replace(/-/g, '_') === baseToCheck.replace(/-/g, '_');
+                    });
+                    
+                    if (matchingService) {
+                        // Extract prefix from filename
+                        const baseName = fileName.replace(/\.json$/i, '');
+                        const underscoreIndex = baseName.indexOf('_');
+                        let columnPrefix = 'version';
+                        if (underscoreIndex > 0) {
+                            columnPrefix = `${baseName.substring(0, underscoreIndex)}_version`;
+                        } else {
+                            columnPrefix = `${baseName}_version`;
+                        }
+                        
+                        // Add version columns with prefix (only if not already present)
+                        Object.keys(matchingService).forEach(key => {
+                            if (key !== 'service') {
+                                const columnName = `${columnPrefix}_${key}`;
+                                // Only add if column doesn't already exist
+                                if (!(columnName in enrichedRow)) {
+                                    enrichedRow[columnName] = matchingService[key] || '';
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                return enrichedRow;
+            });
+        };
+
+        /**
+         * Creates rows for all services found in deployment links.
+         * Can be called even without any files uploaded.
+         * @returns {Object} Information about services added and their names.
+         */
+        const addAllServicesFromDeploymentLinks = () => {
+            const deploymentLinks = getDeploymentLinks();
+            
+            if (deploymentLinks.length === 0) {
+                return { servicesAdded: 0, serviceNames: [], newRows: [] };
+            }
+
+            const extractedServices = new Map(); // service name -> deployment link
+            
+            // Extract all service names from deployment links
+            deploymentLinks.forEach(link => {
+                const serviceName = extractServiceNameFromLink(link);
+                if (serviceName && !extractedServices.has(serviceName)) {
+                    extractedServices.set(serviceName, link);
+                }
+            });
+            
+            // If we have existing data, add the services that don't already exist
+            if (mergedData.length > 0) {
+                const existingServices = new Set(
+                    mergedData.map(row => (row['Service0'] || '').trim().toLowerCase())
+                );
+                
+                let servicesAdded = 0;
+                extractedServices.forEach((link, serviceName) => {
+                    if (!existingServices.has(serviceName.toLowerCase())) {
+                        // Create a new row with the service name and Jira link
+                        const newRow = {
+                            'Service0': serviceName,
+                            'Jira Link': `<a href="${link}" target="_blank" rel="noopener noreferrer">Jira Link</a>`
+                        };
+                        
+                        // Add empty values for other columns that might exist
+                        mergedHeaders.forEach(header => {
+                            if (!(header in newRow)) {
+                                newRow[header] = '';
+                            }
+                        });
+                        
+                        mergedData.push(newRow);
+                        servicesAdded++;
+                    }
+                });
+                
+                return { servicesAdded, serviceNames: Array.from(extractedServices.keys()), newRows: [] };
+            } else {
+                // No existing data, create initial rows for all services
+                const newRows = [];
+                extractedServices.forEach((link, serviceName) => {
+                    newRows.push({
+                        'Service0': serviceName,
+                        'Jira Link': `<a href="${link}" target="_blank" rel="noopener noreferrer">Jira Link</a>`
+                    });
+                });
+                
+                return { 
+                    servicesAdded: newRows.length, 
+                    serviceNames: Array.from(extractedServices.keys()),
+                    newRows 
+                };
+            }
+        };
+
+        /**
+         * Adds Jira links to data based on Service0 column matches with deployment links.
+         */
+        const addJiraLinks = () => {
+            if (mergedData.length === 0) {
+                setStatus('No data available. Please process files first.');
+                return;
+            }
+
+            const deploymentLinks = getDeploymentLinks();
+            
+            if (deploymentLinks.length === 0) {
+                setStatus('No deployment links found. Please add links in Settings first.');
+                return;
+            }
+
+            let linksAdded = 0;
+            let service0Updated = 0;
+            
+            // Process each row of data
+            mergedData.forEach(row => {
+                let service0Value = (row['Service0'] || '').trim();
+                
+                // If Service0 is empty, try to extract from Summary field
+                if (!service0Value) {
+                    const summaryValue = (row['Summary'] || '').trim();
+                    if (summaryValue) {
+                        // Look for the word after "Deploy" (case insensitive)
+                        // Include hyphens as part of the word: [\w-]+ matches letters, numbers, underscores, and hyphens
+                        const deployMatch = summaryValue.match(/deploy\s+([\w-]+)/i);
+                        if (deployMatch && deployMatch[1]) {
+                            service0Value = deployMatch[1].toLowerCase();
+                            row['Service0'] = deployMatch[1]; // Update the actual data
+                            service0Updated++;
+                        }
+                    }
+                }
+                
+                if (service0Value) {
+                    service0Value = service0Value.toLowerCase();
+                    
+                    // Check each deployment link to see if it contains the service name
+                    for (const link of deploymentLinks) {
+                        const linkLower = link.toLowerCase();
+                        
+                        // Check if the service name is contained in the link
+                        if (linkLower.includes(service0Value)) {
+                            // Create HTML link format with "Jira Link" text
+                            row['Jira Link'] = `<a href="${link}" target="_blank" rel="noopener noreferrer">Jira Link</a>`;
+                            linksAdded++;
+                            break; // Only add the first matching link
+                        }
+                    }
+                }
+            });
+
+            // Update headers if we added any links
+            if (linksAdded > 0) {
+                if (!mergedHeaders.includes('Jira Link')) {
+                    mergedHeaders.push('Jira Link');
+                }
+                if (!visibleHeaders.includes('Jira Link')) {
+                    visibleHeaders.push('Jira Link');
+                }
+                
+                // Update the column filter
+                createColumnFilter(mergedHeaders, visibleHeaders);
+                
+                // Refresh the table to show the new links
+                refreshTable();
+                
+                let message = `Added ${linksAdded} Jira link(s) successfully!`;
+                if (service0Updated > 0) {
+                    message += ` Also populated ${service0Updated} empty Service0 field(s) from Summary.`;
+                }
+                updateStatusMessage(message);
+            } else {
+                let message = 'No matching services found in deployment links.';
+                if (service0Updated > 0) {
+                    message += ` However, populated ${service0Updated} empty Service0 field(s) from Summary.`;
+                    // Refresh table to show updated Service0 values
+                    refreshTable();
+                }
+                setStatus(message);
+            }
+        };
+        
+        // --- Event Handlers ---
+
+        const handleProcess = async () => {
+            const jiraFile = jiraFileInput.files[0];
+            const servicesFiles = Array.from(servicesFileInput.files);
+            const versionsFiles = Array.from(versionsFileInput.files);
+
+            // 1. Validation - deployment links are now REQUIRED (they are the base)
+            const deploymentLinks = getDeploymentLinks();
+            
+            if (deploymentLinks.length === 0) {
+                setStatus('Deployment links are required! Please configure them in Settings first. Deployment links define the base services that will be enriched with data from uploaded files.');
+                return;
+            }
+            
+            setStatus('Processing files...', 'loading');
+            processBtn.disabled = true;
+            resultsContainer.classList.add('hidden');
+            tableControls.classList.add('hidden');
+
+            try {
+                // 2. Store services file names, get toggle state, and read files
+                servicesFileNames = servicesFiles.map(file => file.name.replace('.csv', ''));
+                showUnhealthyOnly = showUnhealthyOnlyToggle.checked;
+                showUnequalVersionsOnly = showUnequalVersionsOnlyToggle.checked;
+                showOnlyChngs = showOnlyChngsToggle.checked;
+                
+                // Parse versions JSON files if provided
+                if (versionsFiles.length > 0) {
+                    try {
+                        versionsData = [];
+                        versionsFileNames = [];
+                        for (const file of versionsFiles) {
+                            const data = await parseVersionsJSON(file);
+                            versionsData.push({ data, fileName: file.name });
+                            versionsFileNames.push(file.name);
+                        }
+                        setStatus('Processing files and versions...', 'loading');
+                    } catch (error) {
+                        throw new Error(`Versions JSON error: ${error.message}`);
+                    }
+                } else {
+                    versionsData = []; // Clear previous versions data if no file selected
+                    versionsFileNames = []; // Clear filenames
+                }
+                
+                let jiraData = null;
+                let allServicesData = [];
+                let processedData, matchesFound;
+                
+                // Check if Services CSV files are provided
+                if (servicesFiles.length > 0) {
+                    // Read all services files
+                    const servicesTexts = await Promise.all(servicesFiles.map(file => readFileAsText(file)));
+                    allServicesData = servicesTexts.map(text => parseCSV(text, 'Service0'));
+                    
+                    // Check for required Service0 column
+                    for (let i = 0; i < allServicesData.length; i++) {
+                        if (allServicesData[i].length === 0) {
+                            throw new Error(`Services CSV "${servicesFiles[i].name}" is missing data or the "Service0" column could not be found.`);
+                        }
+                    }
+                }
+                
+                // Check if JIRA file is provided
+                if (jiraFile) {
+                    // Read JIRA file
+                    const jiraText = await readFileAsText(jiraFile);
+                    jiraData = parseCSV(jiraText, 'Summary');
+                    
+                    // Check for required columns
+                    if (jiraData.length === 0) {
+                        throw new Error('JIRA CSV is missing data or the "Summary" column could not be found.');
+                    }
+                }
+                
+                // Store original data globally for reprocessing
+                window.originalJiraData = jiraData;
+                window.originalAllServicesData = allServicesData;
+                window.originalServicesFileNames = servicesFileNames;
+                
+                // NEW APPROACH: Always start with deployment links as the base
+                // Then enrich with data from uploaded files
+                // ORDER MATTERS: Services CSV creates multiple rows, so do it first,
+                // then enrich those rows with JIRA and Versions
+                let baseData = createBaseDataFromDeploymentLinks();
+                matchesFound = baseData.length;
+                
+                if (baseData.length > 0) {
+                    // Step 1: Enrich with Services CSV data (this may create multiple rows per service)
+                    if (servicesFiles.length > 0 && allServicesData.length > 0) {
+                        baseData = enrichWithServicesData(baseData, allServicesData, servicesFileNames);
+                    }
+                    
+                    // Step 2: Enrich with JIRA information (adds columns to existing rows)
+                    if (jiraData && jiraData.length > 0) {
+                        baseData = enrichWithJiraData(baseData, jiraData);
+                    }
+                    
+                    // Step 3: Enrich with Versions JSON data (adds version columns to existing rows)
+                    if (versionsFiles.length > 0 && versionsData.length > 0) {
+                        baseData = enrichWithVersionsData(baseData, versionsData);
+                    }
+                    
+                    processedData = baseData;
+                } else {
+                    // No deployment links configured - show error or empty state
+                    processedData = [];
+                    matchesFound = 0;
+                }
+                
+                // Build headers from the processed data
+                mergedData = processedData;
+                const allHeaders = new Set();
+                
+                // Collect all headers from the data
+                mergedData.forEach(row => {
+                    Object.keys(row).forEach(key => allHeaders.add(key));
+                });
+                
+                // Organize headers in logical order:
+                // 1. Service0 (always first)
+                // 2. Jira Link
+                // 3. Environment (if exists from Services CSV)
+                // 4. JIRA columns
+                // 5. Services CSV columns
+                // 6. Version columns
+                const orderedHeaders = ['Service0', 'Jira Link'];
+                
+                // Add Environment if it exists
+                if (allHeaders.has('Environment')) {
+                    orderedHeaders.push('Environment');
+                }
+                
+                // Add JIRA columns (if JIRA file was provided)
+                if (jiraData && jiraData.length > 0) {
+                    const jiraHeaders = Object.keys(jiraData[0]).filter(h => 
+                        h !== 'Service0' && 
+                        !orderedHeaders.includes(h) &&
+                        !isVersionColumn(h)
+                    );
+                    orderedHeaders.push(...jiraHeaders);
+                }
+                
+                // Add other columns (Services CSV columns, link columns, etc.)
+                const versionHeaders = [];
+                const otherHeaders = [];
+                allHeaders.forEach(header => {
+                    if (!orderedHeaders.includes(header)) {
+                        if (isVersionColumn(header)) {
+                            versionHeaders.push(header);
+                        } else {
+                            otherHeaders.push(header);
+                        }
+                    }
+                });
+                
+                // Combine all headers in order
+                mergedHeaders = [...orderedHeaders, ...otherHeaders, ...versionHeaders];
+                
+                visibleHeaders = [...mergedHeaders]; // Initialize visible headers to show all columns
+
+                // 6. Display results
+                initializeSortOptions(mergedHeaders);
+                createColumnFilter(mergedHeaders);
+                displayTable(mergedData, visibleHeaders);
+                
+                // Update summary text based on processing mode
+                let summaryMessage = '';
+                const filesProvided = [];
+                if (jiraFile) filesProvided.push('JIRA');
+                if (servicesFiles.length > 0) filesProvided.push(`${servicesFiles.length} Services CSV`);
+                if (versionsFiles.length > 0) filesProvided.push(`${versionsFiles.length} Versions JSON`);
+                
+                if (filesProvided.length === 0) {
+                    // No files uploaded - showing only deployment links
+                    summaryMessage = `Displaying ${matchesFound} service(s) from deployment links.`;
+                } else {
+                    // Files were uploaded - enriched the base data
+                    summaryMessage = `Processing complete. Displaying ${matchesFound} service(s) from deployment links, enriched with: ${filesProvided.join(', ')}.`;
+                }
+                
+                summaryText.textContent = summaryMessage;
+                
+                setStatus('', 'success'); // Clear loading status
+                resultsContainer.classList.remove('hidden');
+                tableControls.classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Processing failed:", error);
+                setStatus(error.message || 'An unexpected error occurred.');
+                resultsContainer.classList.add('hidden');
+                tableControls.classList.add('hidden');
+            } finally {
+                processBtn.disabled = false;
+            }
+        };
+
+        const handleDownload = () => {
+            if (mergedData.length === 0) {
+                setStatus('No data available to download.');
+                return;
+            }
+            
+            // Get the exact same data that's currently shown in the table
+            let dataToDownload = [...mergedData];
+            
+            // Apply the same filters as in refreshTable
+            if (showUnhealthyOnly) {
+                dataToDownload = dataToDownload.filter(row => {
+                    const status0 = (row['Status0'] || '').toUpperCase();
+                    return !status0.includes('FULL_SERVICE');
+                });
+            }
+            
+            if (showUnequalVersionsOnly) {
+                dataToDownload = dataToDownload.filter(row => {
+                    // Get the third word from Summary column
+                    const summary = (row['Summary'] || '').trim();
+                    const words = summary.split(/\s+/);
+                    const thirdWord = words.length >= 3 ? words[2] : '';
+                    
+                    if (!thirdWord) return false;
+                    
+                    // Check if any version column has a different value
+                    let hasUnequalVersion = false;
+                    Object.keys(row).forEach(key => {
+                        if (isVersionColumn(key)) {
+                            const versionValue = (row[key] || '').toString();
+                            if (versionValue && !areVersionsEqual(versionValue, thirdWord)) {
+                                hasUnequalVersion = true;
+                            }
+                        }
+                    });
+                    
+                    return hasUnequalVersion;
+                });
+            }
+            
+            if (showOnlyChngs) {
+                dataToDownload = dataToDownload.filter(row => {
+                    const summary = (row['Summary'] || '').trim();
+                    return summary !== '';
+                });
+            }
+            
+            // Apply the same sorting as in refreshTable
+            const sortedData = sortData(dataToDownload, sortColumn, sortDirection);
+            
+            // Use only visible headers (filtered columns)
+            const csvContent = convertToCSV(sortedData, visibleHeaders);
+            downloadFile(csvContent, 'merged_jira_data.csv', 'text/csv;charset=utf-8;');
+        };
+
+        const handleCopyAsImage = () => {
+            if (mergedData.length === 0) {
+                setStatus('No data available to copy.');
+                return;
+            }
+            
+            copyTableAsImage();
+        };
+
+        // --- Attach Event Listeners ---
+        processBtn.addEventListener('click', handleProcess);
+        downloadBtn.addEventListener('click', handleDownload);
+        copySlackBtn.addEventListener('click', handleCopyAsImage);
+        
+        // Sort controls
+        sortColumnSelect.addEventListener('change', (e) => {
+            sortColumn = e.target.value;
+            refreshTable();
+        });
+        
+        sortDirectionBtn.addEventListener('click', () => {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            sortDirectionBtn.textContent = sortDirection === 'asc' ? '↑ ASC' : '↓ DESC';
+            refreshTable();
+        });
+        
+        // Table header clicks for sorting
+        resultsTable.addEventListener('click', (e) => {
+            const header = e.target.closest('.sort-header');
+            if (header) {
+                const column = header.getAttribute('data-column');
+                if (sortColumn === column) {
+                    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortColumn = column;
+                    sortDirection = 'asc';
+                }
+                sortColumnSelect.value = sortColumn;
+                sortDirectionBtn.textContent = sortDirection === 'asc' ? '↑ ASC' : '↓ DESC';
+                refreshTable();
+            }
+        });
+        
+        // Table cell editing
+        resultsTable.addEventListener('click', (e) => {
+            const cell = e.target.closest('.editable-cell');
+            if (cell && !cell.querySelector('.cell-editor')) {
+                makeEditable(cell);
+            }
+        });
+        
+        // Column filter chips
+        columnFilter.addEventListener('click', (e) => {
+            if (e.target.classList.contains('column-chip-remove')) {
+                const columnToRemove = e.target.getAttribute('data-column');
+                removeColumn(columnToRemove);
+            }
+        });
+        
+        // Show all columns button
+        showAllColumnsBtn.addEventListener('click', showAllColumns);
+        
+        // Show unhealthy only toggle
+        showUnhealthyOnlyToggle.addEventListener('change', () => {
+            showUnhealthyOnly = showUnhealthyOnlyToggle.checked;
+            refreshTable();
+        });
+        
+        // Show unequal versions only toggle
+        showUnequalVersionsOnlyToggle.addEventListener('change', () => {
+            showUnequalVersionsOnly = showUnequalVersionsOnlyToggle.checked;
+            refreshTable();
+        });
+        
+        // Ignore empty columns toggle
+        ignoreEmptyColumnsToggle.addEventListener('change', () => {
+            refreshTable();
+        });
+        
+        // Show only CHNGS toggle
+        showOnlyChngsToggle.addEventListener('change', () => {
+            showOnlyChngs = showOnlyChngsToggle.checked;
+            refreshTable();
+        });
+        
+        // Delete selected rows button
+        deleteSelectedBtn.addEventListener('click', deleteSelectedRows);
+        
+        // Restore deleted rows button
+        restoreRowsBtn.addEventListener('click', restoreDeletedRows);
+        
+        // Add Jira links button
+        addJiraLinksBtn.addEventListener('click', addJiraLinks);
+        
+        // Versions file change handler - reprocess data when file is changed or removed
+        versionsFileInput.addEventListener('change', async () => {
+            if (mergedData.length > 0) {
+                // Reprocess data with new versions file (or without if removed)
+                await reprocessData();
+            }
+        });
+        
+        // Settings modal event listeners
+        settingsBtn.addEventListener('click', openSettingsModal);
+        settingsBackBtn.addEventListener('click', closeSettingsModal);
+        
+        // Jenkins configuration event listeners
+        toggleJenkinsConfigBtn.addEventListener('click', () => {
+            jenkinsConfigSection.classList.toggle('hidden');
+        });
+        
+        refreshBuildLinksBtn.addEventListener('click', refreshBuildLinks);
+        
+        // Update refresh button state when Jenkins credentials change
+        jenkinsDeploysUrlInput.addEventListener('input', updateRefreshButtonState);
+        jenkinsApiUsernameInput.addEventListener('input', updateRefreshButtonState);
+        jenkinsApiPassInput.addEventListener('input', updateRefreshButtonState);
+        
+        // Close modal when clicking outside of it
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                closeSettingsModal();
+            }
+        });
+        
+        // Auto-save on input changes (with debounce)
+        let saveTimeout;
+        jiraDeploymentLinksInput.addEventListener('input', () => {
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                localStorage.setItem('jiraDeploymentLinks', jiraDeploymentLinksInput.value);
+            }, 1000); // Save after 1 second of no typing
+        });
+    </script>
+
+</body>
+</html>
