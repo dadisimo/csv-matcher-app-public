@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Service Matcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="bg-slate-100 text-slate-800 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-7xl bg-white rounded-xl shadow-lg p-6 md:p-8 space-y-6 relative">
+        <!-- Home/Reset Button (Top Right Corner) -->
+        <button id="reset-btn" class="hidden absolute top-6 right-6 text-4xl hover:scale-110 transition-transform duration-200 focus:outline-none" title="Reset to initial state">
+            🏠
+        </button>
+        
+        <!-- Header Section -->
+        <div>
+            <div class="flex items-baseline gap-3">
+                <h1 class="text-3xl font-bold text-slate-900">CSV Service Matcher</h1>
+                <span id="app-version" class="text-sm text-slate-400 font-mono">v1.1.3</span>
+            </div>
+            <p class="mt-2 text-slate-600">Upload two CSV files. The tool will find service names from the second file within the 'Summary' column of the first file and merge the data.</p>
+        </div>
+
+        <!-- File Upload Section -->
+        <div id="file-upload-section" class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-200">
+            <!-- Services CSV Input (Optional) -->
+            <div>
+                <label for="services-file" class="block text-sm font-medium text-slate-700 mb-1">1. Upload Services CSV(s) (Optional)</label>
+                <p class="text-xs text-slate-500 mb-2">Must contain a "Service0" column. You can select multiple files.</p>
+                <input type="file" id="services-file" accept=".csv" multiple class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-colors duration-200"/>
+            </div>
+            <!-- JIRA CSV Input (Optional) -->
+            <div>
+                <label for="jira-file" class="block text-sm font-medium text-slate-700 mb-1">2. Upload JIRA CSV (Optional)</label>
+                <p class="text-xs text-slate-500 mb-2">If provided, must contain a "Summary" column.</p>
+                <input type="file" id="jira-file" accept=".csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors duration-200"/>
+            </div>
+            <!-- Versions JSON Input (Optional - Multiple) -->
+            <div>
+                <label for="versions-file" class="block text-sm font-medium text-slate-700 mb-1">3. Upload Versions JSON (Optional)</label>
+                <p class="text-xs text-slate-500 mb-2">Must contain a "service_versions" array. You can select multiple files. Requires deployment links in Settings.</p>
+                <input type="file" id="versions-file" accept=".json" multiple class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 transition-colors duration-200"/>
+            </div>
+        </div>
+        
+        <!-- Action Button -->
+        <div class="flex justify-center items-center gap-3 pt-4">
+            <button id="process-btn" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-200 hover:scale-105 disabled:bg-slate-400 disabled:cursor-not-allowed disabled:scale-100">
+                Process Files
+            </button>
+            <button id="settings-btn" class="bg-gray-600 text-white font-bold py-2 px-3 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform duration-200 hover:scale-105" title="Settings">
+                ⚙️
+            </button>
+        </div>
+
+        <!-- Table Controls (Initially Hidden) -->
+        <div id="table-controls" class="hidden space-y-4 pt-4 border-t border-slate-200">
+            <!-- Filter Toggles -->
+            <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center flex-wrap">
+                <!-- Show Unhealthy Only Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-unhealthy-only" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-unhealthy-only" class="text-sm font-medium text-slate-700">Show unhealthy only</label>
+                </div>
+                
+                <!-- Show Unequal Versions Only Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-unequal-versions-only" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-unequal-versions-only" class="text-sm font-medium text-slate-700">Show unequal versions only</label>
+                </div>
+                
+                <!-- Show Unequal Bundles Only Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-unequal-bundles-only" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-unequal-bundles-only" class="text-sm font-medium text-slate-700">Show unequal bundles only</label>
+                </div>
+                
+                <!-- Ignore Empty Columns Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="ignore-empty-columns" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="ignore-empty-columns" class="text-sm font-medium text-slate-700">Ignore empty columns</label>
+                </div>
+                
+                <!-- Show Only CHNGS Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-only-chngs" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-only-chngs" class="text-sm font-medium text-slate-700">Show only CHNGS</label>
+                </div>
+                
+                <!-- Show Bundle Versions Toggle -->
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-bundle-versions" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                    <label for="show-bundle-versions" class="text-sm font-medium text-slate-700">Show bundle versions</label>
+                </div>
+            </div>
+            
+            <!-- Column Filter -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-sm font-medium text-slate-700">Visible Columns:</label>
+                    <button id="show-all-columns" class="text-xs px-2 py-1 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Show All
+                    </button>
+                </div>
+                <div id="column-filter" class="border border-slate-300 rounded-md p-3 min-h-[2.5rem] bg-white">
+                    <!-- Column chips will be added here dynamically -->
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Click the × next to a column name to hide it from the table.</p>
+            </div>
+        </div>
+
+        <!-- Error and Loading Section -->
+        <div id="status-container" class="text-center p-4"></div>
+
+        <!-- Results Section -->
+        <div id="results-container" class="hidden space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-200">
+                 <h2 class="text-2xl font-bold text-slate-900">Merged Data</h2>
+                 <div class="flex gap-2">
+                     <button id="add-jira-links-btn" class="hidden bg-orange-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform duration-200 hover:scale-105">
+                        Add Jenkins Links
+                    </button>
+                     <button id="show-builds-btn" class="bg-purple-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform duration-200 hover:scale-105">
+                        Actual Builds ✓
+                    </button>
+                     <button id="show-health-btn" class="bg-teal-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-transform duration-200 hover:scale-105">
+                        Service ❤️
+                    </button>
+                     <button id="get-build-versions-btn" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform duration-200 hover:scale-105">
+                        Actual Services
+                    </button>
+                     <button id="get-last-committer-btn" class="bg-amber-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-transform duration-200 hover:scale-105">
+                        Last Committer 🔍
+                    </button>
+                     <button id="copy-slack-btn" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-200 hover:scale-105">
+                        Copy as Image
+                    </button>
+                     <button id="download-btn" class="hidden bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform duration-200 hover:scale-105">
+                        Download Merged CSV
+                    </button>
+                 </div>
+            </div>
+            <p id="summary-text" class="text-sm text-slate-600"></p>
+            <div class="table-container w-full overflow-x-auto border border-slate-200 rounded-lg max-h-[50vh]">
+                <table id="results-table" class="w-full text-sm text-left text-slate-600">
+                    <!-- Table content will be generated by JavaScript -->
+                </table>
+            </div>
+            
+            <!-- Row Management Buttons -->
+            <div class="flex justify-between items-center pt-4 border-t border-slate-200">
+                <div class="flex gap-2">
+                    <button id="delete-selected-btn" class="bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Delete Selected Rows
+                    </button>
+                    <button id="restore-rows-btn" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Restore Deleted Rows
+                    </button>
+                </div>
+                <div id="selection-info" class="text-sm text-slate-600">
+                    <!-- Selection info will be displayed here -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-60 z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center space-y-4 min-w-96">
+            <svg class="w-16 h-16 animate-spin text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <div id="loading-title" class="text-xl font-semibold text-gray-800">Fetching build information...</div>
+            <div id="loading-message" class="text-sm text-gray-600">Please wait while we retrieve data from Jenkins</div>
+            <!-- Progress bar container (hidden by default) -->
+            <div id="progress-container" class="w-full hidden">
+                <div class="flex justify-between text-xs text-gray-600 mb-1">
+                    <span id="progress-text">Processing...</span>
+                    <span id="progress-percentage">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <!-- Settings Header -->
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-gray-900">Settings</h2>
+                <div class="flex items-center gap-2">
+                    <button id="import-settings-btn" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 text-sm flex items-center gap-1" title="Import settings from JSON file">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        Import
+                    </button>
+                    <button id="export-settings-btn" class="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 text-sm flex items-center gap-1" title="Export settings to JSON file">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+                        </svg>
+                        Export
+                    </button>
+                    <button id="settings-back-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
+                        ← Back
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Settings Content -->
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div class="space-y-6">
+                    <!-- Jenkins Deployment Links Section -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="jira-deployment-links" class="block text-sm font-medium text-gray-700">
+                                Jenkins Deployment Links
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <button 
+                                    type="button"
+                                    id="refresh-build-links-btn" 
+                                    class="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:hover:bg-gray-300 transition-colors duration-200"
+                                    title="Fetch deployment links from Jenkins API (requires configuration)"
+                                    disabled
+                                >
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                    Refresh
+                                </button>
+                                <button 
+                                    type="button"
+                                    id="toggle-jenkins-config-btn" 
+                                    class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors duration-200"
+                                    title="Show/hide Jenkins configuration"
+                                    onclick="document.getElementById('jenkins-config-section').classList.toggle('hidden'); console.log('Inline click worked!');"
+                                >
+                                    ⚙️ Config
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible Jenkins Configuration -->
+                        <div id="jenkins-config-section" class="hidden mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                            <h4 class="text-sm font-medium text-gray-800 mb-2">Jenkins API Configuration</h4>
+                            <div>
+                                <label for="jenkins-deploys-url" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins Deploys URL
+                                </label>
+                                <input 
+                                    type="url" 
+                                    id="jenkins-deploys-url" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="https://jenkins.example.com/job/deploys/api/json"
+                                />
+                            </div>
+                            <div>
+                                <label for="jenkins-api-username" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins API Username
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="jenkins-api-username" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-username"
+                                />
+                            </div>
+                            <div>
+                                <label for="jenkins-api-pass" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins API Password/Token
+                                </label>
+                                <input 
+                                    type="password" 
+                                    id="jenkins-api-pass" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-api-token"
+                                />
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">
+                                These credentials are saved locally in your browser and used to fetch deployment links from Jenkins API.
+                            </p>
+                        </div>
+                        
+                        <p class="text-sm text-gray-500 mb-3">
+                            Enter deployment links, one per line. These links will be used for generating deployment references. Use the refresh button above to automatically fetch from Jenkins API.
+                        </p>
+                        <textarea 
+                            id="jira-deployment-links" 
+                            rows="10" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                            placeholder="https://example.com/deployment1&#10;https://example.com/deployment2&#10;https://example.com/deployment3"
+                        ></textarea>
+                        <p class="text-xs text-gray-400 mt-2">
+                            Changes are automatically saved when you go back to the main window.
+                        </p>
+                    </div>
+
+                    <!-- Jenkins Build Links Section -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="jira-build-links" class="block text-sm font-medium text-gray-700">
+                                Jenkins Build Links
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <button 
+                                    type="button"
+                                    id="refresh-build-links-2-btn" 
+                                    class="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:hover:bg-gray-300 transition-colors duration-200"
+                                    title="Fetch build links from Jenkins API (requires configuration)"
+                                    disabled
+                                >
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                    Refresh
+                                </button>
+                                <button 
+                                    type="button"
+                                    id="toggle-jenkins-config-2-btn" 
+                                    class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors duration-200"
+                                    title="Show/hide Jenkins configuration"
+                                    onclick="document.getElementById('jenkins-config-2-section').classList.toggle('hidden'); console.log('Inline click 2 worked!');"
+                                >
+                                    ⚙️ Config
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible Jenkins Configuration for Build Links -->
+                        <div id="jenkins-config-2-section" class="hidden mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                            <h4 class="text-sm font-medium text-gray-800 mb-2">Jenkins API Configuration</h4>
+                            <div>
+                                <label for="jenkins-builds-url" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins Builds URL
+                                </label>
+                                <input 
+                                    type="url" 
+                                    id="jenkins-builds-url" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="https://jenkins.example.com/job/builds/api/json"
+                                />
+                            </div>
+                            <div>
+                                <label for="jenkins-builds-username" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins API Username
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="jenkins-builds-username" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-username"
+                                />
+                            </div>
+                            <div>
+                                <label for="jenkins-builds-pass" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Jenkins API Password/Token
+                                </label>
+                                <input 
+                                    type="password" 
+                                    id="jenkins-builds-pass" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-api-token"
+                                />
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">
+                                These credentials are saved locally in your browser and used to fetch build links from Jenkins API.
+                            </p>
+                        </div>
+                        
+                        <p class="text-sm text-gray-500 mb-3">
+                            Enter build links, one per line. These links will be used for generating build references in the matched data. Use the refresh button above to automatically fetch from Jenkins API.
+                        </p>
+                        <textarea 
+                            id="jira-build-links" 
+                            rows="8" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                            placeholder="https://build.example.com/job/service1&#10;https://build.example.com/job/service2&#10;https://build.example.com/job/service3"
+                        ></textarea>
+                        <p class="text-xs text-gray-400 mt-2">
+                            Changes are automatically saved when you go back to the main window.
+                        </p>
+                    </div>
+
+                    <!-- Jenkins Build API Credentials Section -->
+                    <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-3">Jenkins Build API Credentials</h3>
+                        <p class="text-xs text-gray-600 mb-3">
+                            These credentials are used by "Show Last Successful Builds" button to fetch build information.
+                        </p>
+                        <div class="space-y-3">
+                            <div>
+                                <label for="jenkins-build-api-username" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Username
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="jenkins-build-api-username" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-username"
+                                />
+                            </div>
+                            <div>
+                                <label for="jenkins-build-api-password" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Password/Token
+                                </label>
+                                <input 
+                                    type="password" 
+                                    id="jenkins-build-api-password" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="your-api-token"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Service Health Configuration Section -->
+                    <div class="p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-3">Service Health Configuration</h3>
+                        <p class="text-xs text-gray-600 mb-3">
+                            Configure environments and credentials for the "Show Service Health" feature.
+                        </p>
+                        <div class="space-y-3">
+                            <div>
+                                <label for="health-environments" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Environments
+                                </label>
+                                <textarea 
+                                    id="health-environments" 
+                                    rows="3" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 font-mono"
+                                    placeholder="qa&#10;staging&#10;prod"
+                                ></textarea>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Enter environment names, one per line (e.g., qa, staging, prod).
+                                </p>
+                            </div>
+                            <div>
+                                <label for="health-api-username" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Service Health API Username
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="health-api-username" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    placeholder="your-username"
+                                />
+                            </div>
+                            <div>
+                                <label for="health-api-password" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Service Health API Password
+                                </label>
+                                <input 
+                                    type="password" 
+                                    id="health-api-password" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    placeholder="your-password"
+                                />
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">
+                                Note: These credentials are different from Jenkins API credentials and are used specifically for health check endpoints.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Bitbucket API Configuration Section -->
+                    <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-3">Bitbucket API Configuration</h3>
+                        <p class="text-xs text-gray-600 mb-3">
+                            Configure Bitbucket API credentials for the "Last Committer" feature.
+                        </p>
+                        <div class="space-y-3">
+                            <div>
+                                <label for="bitbucket-api-url" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Bitbucket API Base URL
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="bitbucket-api-url" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-yellow-500 font-mono"
+                                    placeholder="https://api.bitbucket.org/2.0/repositories/workspace/repository"
+                                />
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Format: https://api.bitbucket.org/2.0/repositories/{workspace}/{repository}
+                                </p>
+                            </div>
+                            <div>
+                                <label for="bitbucket-api-username" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Bitbucket Username
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="bitbucket-api-username" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    placeholder="your-bitbucket-username"
+                                />
+                            </div>
+                            <div>
+                                <label for="bitbucket-api-password" class="block text-xs font-medium text-gray-700 mb-1">
+                                    Bitbucket App Password
+                                </label>
+                                <input 
+                                    type="password" 
+                                    id="bitbucket-api-password" 
+                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                    placeholder="your-app-password"
+                                />
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Create an app password at: Bitbucket Settings → App passwords
+                                </p>
+                            </div>
+                            <div class="pt-3 border-t border-yellow-300">
+                                <label class="block text-xs font-medium text-gray-700 mb-2">
+                                    Search Directories
+                                </label>
+                                <p class="text-xs text-gray-500 mb-2">
+                                    Specify directories to search for services. Each directory can have a custom max depth.
+                                </p>
+                                <div id="bitbucket-directories-container" class="space-y-2 mb-3">
+                                    <!-- Directory entries will be added here dynamically -->
+                                </div>
+                                <button 
+                                    id="add-bitbucket-directory-btn"
+                                    type="button"
+                                    class="px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors"
+                                >
+                                    + Add Directory
+                                </button>
+                            </div>
+                            
+                            <div class="pt-3 border-t border-yellow-300">
+                                <label class="block text-xs font-medium text-gray-700 mb-2">
+                                    Directories to Ignore
+                                </label>
+                                <p class="text-xs text-gray-500 mb-2">
+                                    Specify directory patterns to ignore in Bitbucket API requests. Supports wildcards (*).
+                                </p>
+                                <div id="bitbucket-ignore-dirs-container" class="space-y-2 mb-3">
+                                    <!-- Ignore directory entries will be added here dynamically -->
+                                </div>
+                                <button 
+                                    id="add-bitbucket-ignore-dir-btn"
+                                    type="button"
+                                    class="px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors"
+                                >
+                                    + Add Pattern
+                                </button>
+                            </div>
+                            
+                            <div class="pt-3 border-t border-yellow-300">
+                                <label class="block text-xs font-medium text-gray-700 mb-2">
+                                    Service Name Mappings
+                                </label>
+                                <p class="text-xs text-gray-500 mb-2">
+                                    Map table service names to Bitbucket paths. If mapping contains "/", URL must end with the value.
+                                </p>
+                                <div id="bitbucket-service-mappings-container" class="space-y-2 mb-3">
+                                    <!-- Service mapping entries will be added here dynamically -->
+                                </div>
+                                <button 
+                                    id="add-bitbucket-service-mapping-btn"
+                                    type="button"
+                                    class="px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors"
+                                >
+                                    + Add Mapping
+                                </button>
+                            </div>
+                            
+                            <div class="pt-3 border-t border-yellow-300">
+                                <label class="block text-xs font-medium text-gray-700 mb-2">
+                                    Committers to Ignore
+                                </label>
+                                <p class="text-xs text-gray-500 mb-2">
+                                    Specify committer names to ignore. Only commits from other users will be shown in "Last Committer" column.
+                                </p>
+                                <div id="bitbucket-ignore-committers-container" class="space-y-2 mb-3">
+                                    <!-- Ignore committer entries will be added here dynamically -->
+                                </div>
+                                <button 
+                                    id="add-bitbucket-ignore-committer-btn"
+                                    type="button"
+                                    class="px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors"
+                                >
+                                    + Add Committer
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Environment Name Section -->
+                    <div>
+                        <label for="filter-env-regex" class="block text-sm font-medium text-gray-700 mb-2">
+                            Filter Environment Name
+                        </label>
+                        <p class="text-sm text-gray-500 mb-3">
+                            Enter a regex pattern to shorten environment names. The pattern will be used to extract a portion of the Environment column value.
+                        </p>
+                        <input 
+                            type="text" 
+                            id="filter-env-regex" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                            placeholder="e.g., ([^-]+) to extract text before hyphen"
+                        />
+                        <p class="text-xs text-gray-400 mt-2">
+                            Leave empty to show full environment names. Example: "([^-]+)" extracts "prod" from "prod-us-east-1".
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for importing settings -->
+    <input type="file" id="import-settings-file" accept=".json" class="hidden" />
+
+    <script type="module">
+        console.log('=== INLINE SCRIPT STARTED ===');
+        import { initializeApp } from './js/app.js';
+        console.log('=== APP.JS IMPORTED ===');
+        
+        // Initialize the application when DOM is ready
+        if (document.readyState === 'loading') {
+            console.log('DOM is loading, adding event listener');
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            console.log('DOM already loaded, calling initializeApp directly');
+            initializeApp();
+        }
+    </script>
+
+</body>
+</html>
